@@ -1,0 +1,212 @@
+{
+  "name": "Instagram Chatbot - Jera Bot AI",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-post",
+      "name": "Webhook POST (Messages)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "instagram-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "instagram-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-get",
+      "name": "Webhook GET (Verify)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 520],
+      "webhookId": "instagram-webhook-verify"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {}
+      },
+      "id": "verify-response",
+      "name": "Verify Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [500, 520]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-check-message",
+              "leftValue": "={{ $json.body.entry[0].messaging[0].message.text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-messages",
+      "name": "Filter: Has Message Text",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Извлекаем данные сообщения\nconst entry = $input.first().json.body.entry[0];\nconst messaging = entry.messaging[0];\nconst senderId = messaging.sender.id;\nconst messageText = messaging.message.text;\n\nreturn [{\n  json: {\n    senderId: senderId,\n    messageText: messageText,\n    timestamp: messaging.timestamp\n  }\n}];"
+      },
+      "id": "extract-message",
+      "name": "Extract Message Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Простая логика ответов бота\nconst messageText = $input.first().json.messageText.toLowerCase();\nlet reply = '';\n\nif (messageText.includes('привет') || messageText.includes('здравствуй') || messageText.includes('hi') || messageText.includes('hello')) {\n  reply = 'Привет! 👋 Добро пожаловать! Я — AI-ассистент Jera Bot. Чем могу помочь?\\n\\nНапишите:\\n• \"услуги\" — узнать о наших услугах\\n• \"цены\" — узнать стоимость\\n• \"контакты\" — связаться с нами';\n} else if (messageText.includes('услуг')) {\n  reply = '📋 Наши услуги:\\n\\n1. Разработка чат-ботов\\n2. Автоматизация бизнес-процессов\\n3. AI-интеграции\\n4. Консультации по digital-трансформации\\n\\nНапишите номер услуги для подробностей!';\n} else if (messageText.includes('цен') || messageText.includes('стоимость') || messageText.includes('сколько')) {\n  reply = '💰 Стоимость зависит от проекта. Напишите \"контакты\" чтобы связаться с менеджером для расчёта.';\n} else if (messageText.includes('контакт')) {\n  reply = '📞 Свяжитесь с нами:\\n\\n• Telegram: @jera_ai\\n• Email: info@jera.ai\\n\\nМы ответим в течение часа!';\n} else {\n  reply = 'Спасибо за сообщение! Я пока не совсем понял ваш запрос. 🤔\\n\\nПопробуйте:\\n• \"привет\" — начать диалог\\n• \"услуги\" — узнать о наших услугах\\n• \"цены\" — узнать стоимость\\n• \"контакты\" — связаться с нами';\n}\n\nreturn [{\n  json: {\n    senderId: $input.first().json.senderId,\n    reply: reply\n  }\n}];"
+      },
+      "id": "bot-logic",
+      "name": "Bot Logic (Generate Reply)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v21.0/me/messages",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "={{ $env.INSTAGRAM_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"recipient\": {\n    \"id\": \"{{ $json.senderId }}\"\n  },\n  \"message\": {\n    \"text\": {{ JSON.stringify($json.reply) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "send-reply",
+      "name": "Send Reply to Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"ok\"}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1380, 300]
+    }
+  ],
+  "connections": {
+    "Webhook POST (Messages)": {
+      "main": [
+        [
+          {
+            "node": "Filter: Has Message Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook GET (Verify)": {
+      "main": [
+        [
+          {
+            "node": "Verify Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Has Message Text": {
+      "main": [
+        [
+          {
+            "node": "Extract Message Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message Data": {
+      "main": [
+        [
+          {
+            "node": "Bot Logic (Generate Reply)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bot Logic (Generate Reply)": {
+      "main": [
+        [
+          {
+            "node": "Send Reply to Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reply to Instagram": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "instagram",
+      "id": "1"
+    },
+    {
+      "name": "chatbot",
+      "id": "2"
+    }
+  ]
+}
