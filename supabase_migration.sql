@@ -130,9 +130,8 @@ INSERT INTO schedule_slots (master_id, date, start_time, end_time, is_booked)
 SELECT
   m.id,
   d::date,
-  t::time,
-  (t + interval '30 minutes')::time,
-  -- ~20% randomly booked
+  (CURRENT_DATE + (slot_num * interval '30 minutes') + interval '9 hours')::time,
+  (CURRENT_DATE + (slot_num * interval '30 minutes') + interval '9 hours 30 minutes')::time,
   (random() < 0.2)
 FROM masters m
 CROSS JOIN generate_series(
@@ -140,12 +139,8 @@ CROSS JOIN generate_series(
   CURRENT_DATE + interval '6 days',
   interval '1 day'
 ) AS d
-CROSS JOIN generate_series(
-  '09:00'::timestamp,
-  '18:30'::timestamp,
-  interval '30 minutes'
-) AS t
-WHERE EXTRACT(DOW FROM d::date) != 0  -- skip Sunday (0 = Sunday)
+CROSS JOIN generate_series(0, 19) AS slot_num
+WHERE EXTRACT(DOW FROM d::date) != 0
   AND m.is_active = true;
 
 -- =====================================================
