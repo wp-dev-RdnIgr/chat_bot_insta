@@ -141,8 +141,8 @@ CROSS JOIN generate_series(
   interval '1 day'
 ) AS d
 CROSS JOIN generate_series(
-  '09:00'::time,
-  '18:30'::time,
+  '09:00'::timestamp,
+  '18:30'::timestamp,
   interval '30 minutes'
 ) AS t
 WHERE EXTRACT(DOW FROM d::date) != 0  -- skip Sunday (0 = Sunday)
