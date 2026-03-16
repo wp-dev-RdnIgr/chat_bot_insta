@@ -94,7 +94,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v21.0/me/messages",
+        "url": "=https://graph.instagram.com/v21.0/me/messages",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
