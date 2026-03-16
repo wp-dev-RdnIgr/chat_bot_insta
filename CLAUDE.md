@@ -30,8 +30,8 @@ Demo-кейс для портфолио агентства: бот-админи�
 - MCP Server: `https://mcp.supabase.com/mcp?project_ref=saajgmcaohjqtxufffid`
 
 ### Instagram / Meta
-- Current token (IGAA... — Instagram token, НЕ работает для Messaging API!): `IGAAVQ2FGSYClBZAFp4RHNiSEhqUWRuaTZAPbUFBTDBjTUZAmNF9oU1hHZAE92NGVOWnBJdjlCY2lHeEhTcVRDcGhxUjl2TFg5MW5kMVV3cTFlVS1hbl9xVllIOEZAXOHdFUXFjcXQwbjZAMeTNLUmdaU0ZAnOWIxZAnM0ZAG1NTEdmTks2YwZDZD`
-- **ПРОБЛЕМА:** Для Instagram Messaging API нужен **Page Access Token** (начинается с `EAA...`), не Instagram User Token (`IGAA...`). Ошибка: "Invalid OAuth access token - Cannot parse access token"
+- Page Access Token (EAA...): `EAAfShrHKRZAcBQ7ZCq8iZCWQJdhRmZB3QiovTl5skE6nfXtM4OQl2Hf1zdlx7TG4f8qoXNZBJ5j7iKIfEggE5oP4Tb3O3kDtjmomslGRCz6n5gdZBZA2fdZAU8rwKjLRZBT7UifjSf9I8lN0vKgeQ35UY52Nvp75VnYIzJLGKfZBC32Tx8ZA5wnwPZBhzIm5x6nHd728WoBIuETvAgZDZD`
+- ✅ Токен обновлён — Page Access Token установлен в workflow
 - Send endpoint: `https://graph.instagram.com/v21.0/me/messages`
 
 ## Files
@@ -78,17 +78,16 @@ services, masters, master_services, schedule_slots, clients, bookings, conversat
 
 ## TODO — Remaining Tasks 🔲
 
-1. 🔲 **USER ACTION: Run SQL migration** — user must open Supabase SQL Editor (https://supabase.com/dashboard/project/saajgmcaohjqtxufffid/sql/new) and paste+run `supabase_migration.sql`
-2. 🔲 **Verify Supabase tables** — after migration, check that all 7 tables exist and seed data is correct via REST API
-3. 🔲 **Fix Instagram token** — need Page Access Token (EAA...) instead of current IGAA... token. User needs to generate it in Meta Developer Console → Messenger/Instagram → Generate Token for Facebook Page linked to Instagram
+1. ✅ **SQL migration** — выполнена, 7 таблиц + seed data загружены
+2. ✅ **Supabase verified** — 11 услуг, 4 мастера, 16 связей, 480 слотов
+3. ✅ **Instagram token fixed** — Page Access Token (EAA...) установлен в workflow
 4. 🔲 **End-to-end test** — send message in Instagram DM, verify full flow works
-5. 🔲 **Commit & push final state** after everything works
+5. 🔲 **Commit & push final state**
 
 ## Known Issues
 
 - **n8n Code node sandbox**: fetch(), axios, https, pg modules all blocked. Only `helpers.httpRequest()` works for HTTP calls.
 - **n8n PostgreSQL connection to Supabase**: fails with ENETUNREACH (IPv6). Cannot run DDL from n8n.
-- **Instagram token**: IGAA... token doesn't work for Messaging API. Need EAA... Page Access Token.
 - **Egress from sandbox**: direct connections to graph.instagram.com and graph.facebook.com blocked from this dev environment (but n8n can reach them).
 
 ## Git
