@@ -30,8 +30,8 @@ Demo-кейс для портфолио агентства: бот-админи�
 - MCP Server: `https://mcp.supabase.com/mcp?project_ref=saajgmcaohjqtxufffid`
 
 ### Instagram / Meta
-- Page Access Token (EAA...): `EAAfShrHKRZAcBQ7ZCq8iZCWQJdhRmZB3QiovTl5skE6nfXtM4OQl2Hf1zdlx7TG4f8qoXNZBJ5j7iKIfEggE5oP4Tb3O3kDtjmomslGRCz6n5gdZBZA2fdZAU8rwKjLRZBT7UifjSf9I8lN0vKgeQ35UY52Nvp75VnYIzJLGKfZBC32Tx8ZA5wnwPZBhzIm5x6nHd728WoBIuETvAgZDZD`
-- ✅ Токен обновлён — Page Access Token установлен в workflow
+- Instagram Access Token (IGAA...): `IGAAVQ2FGSYClBZAFp4RHNiSEhqUWRuaTZAPbUFBTDBjTUZAmNF9oU1hHZAE92NGVOWnBJdjlCY2lHeEhTcVRDcGhxUjl2TFg5MW5kMVV3cTFlVS1hbl9xVllIOEZAXOHdFUXFjcXQwbjZAMeTNLUmdaU0ZAnOWIxZAnM0ZAG1NTEdmTks2YwZDZD`
+- ✅ Токен установлен в workflow (hardcoded, без $env)
 - Send endpoint: `https://graph.instagram.com/v21.0/me/messages`
 
 ## Files
