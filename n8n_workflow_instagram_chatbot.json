@@ -59,6 +59,15 @@
                 "operation": "exists",
                 "singleValue": true
               }
+            },
+            {
+              "id": "condition-no-echo",
+              "leftValue": "={{ $json.body.entry[0].messaging[0].message.is_echo }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEqual"
+              }
             }
           ],
           "combinator": "and"
@@ -201,7 +210,13 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"p_client_id\": \"{{ $fromAI('client_id', 'UUID of the client from the system context') }}\",\n  \"p_master_id\": \"{{ $fromAI('master_id', 'UUID of the master') }}\",\n  \"p_service_id\": \"{{ $fromAI('service_id', 'UUID of the service') }}\",\n  \"p_slot_id\": \"{{ $fromAI('slot_id', 'UUID of the time slot from find_available_times result') }}\"\n}",
-        "options": {}
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
       },
       "id": "tool-create-booking",
       "name": "Create Booking",
