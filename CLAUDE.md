@@ -46,20 +46,28 @@ Demo-кейс для портфолио агентства: бот-админи�
 
 ## n8n Workflow Structure (ID: 5iXUqYa4eX72YBbP)
 
-Nodes:
+**v2 — AI Operator (OpenAI GPT-4.1-mini)**
+
+Nodes (13):
 1. **Webhook POST** — принимает входящие Instagram DM
 2. **Webhook GET** — верификация Meta webhook (hub.challenge)
 3. **Verify Response** — отдаёт hub.challenge
 4. **Filter: Has Message** — фильтрует только сообщения
 5. **Respond OK** — немедленно 200 Instagram
-6. **Bot Engine** (Code node) — вся бот-логика, использует `helpers.httpRequest()` для Supabase REST API
-7. **Send Reply to Instagram** — HTTP Request → graph.instagram.com
+6. **Prepare Context** (Code node) — загружает клиента, услуги, мастеров, слоты из Supabase; строит system prompt
+7. **AI Operator** (AI Agent node) — основной мозг бота, ведёт диалог на украинском
+8. **OpenAI Chat Model** (gpt-4.1-mini, credential: `b1hLC5E1Ad7p27A9`) — LLM sub-node
+9. **Window Buffer Memory** — хранит историю диалога (session ID = Instagram sender ID, 20 сообщений)
+10. **Find Available Times** (HTTP Request Tool) — вызывает Supabase RPC `find_available_times`
+11. **Create Booking** (HTTP Request Tool) — вызывает Supabase RPC `create_booking`
+12. **Format Reply** (Code node) — форматирует ответ AI для Instagram (макс. 950 символов)
+13. **Send Reply to Instagram** — HTTP Request → graph.instagram.com
 
-## Bot Conversation Flow (7 steps)
+## Bot Conversation Flow
 
-GREETING → SELECT_SERVICE → SELECT_MASTER → SELECT_DATE → SELECT_TIME → CONFIRM → DONE
-
-Special commands (any step): спочатку/заново, мої записи, прайс/ціни
+AI-driven — бот ведёт свободный диалог на украинском языке.
+Может отвечать на вопросы о услугах, ценах, мастерах.
+Для записи использует tools: find_available_times → create_booking.
 
 ## Database (Supabase) — 7 tables
 
@@ -68,21 +76,22 @@ services, masters, master_services, schedule_slots, clients, bookings, conversat
 ## COMPLETED ✅
 
 1. ✅ SQL migration file created (`supabase_migration.sql`) — 7 tables, seed data (11 services, 4 masters, schedule 7 days), helper functions
-2. ✅ n8n workflow created & deployed — full conversation state machine
+2. ✅ n8n workflow v1 created & deployed — button-based state machine
 3. ✅ Bot Engine rewritten to use `helpers.httpRequest()` (fetch/axios/https blocked in n8n sandbox)
 4. ✅ Supabase credentials hardcoded in Bot Engine
 5. ✅ README.md with full setup instructions
 6. ✅ MCP config added (.mcp.json)
 7. ✅ Webhook receives messages from Instagram (verified — execution 405536)
 8. ✅ Temp migration workflow cleaned up
+9. ✅ **v2: AI Operator** — replaced state machine with OpenAI-powered AI Agent (gpt-4.1-mini)
+10. ✅ AI Agent has tools: find_available_times, create_booking (Supabase RPC)
+11. ✅ Window Buffer Memory for conversation persistence (session per Instagram user)
+12. ✅ Workflow deployed to n8n (13 nodes, active)
 
 ## TODO — Remaining Tasks 🔲
 
-1. ✅ **SQL migration** — выполнена, 7 таблиц + seed data загружены
-2. ✅ **Supabase verified** — 11 услуг, 4 мастера, 16 связей, 480 слотов
-3. ✅ **Instagram token fixed** — Page Access Token (EAA...) установлен в workflow
-4. 🔲 **End-to-end test** — send message in Instagram DM, verify full flow works
-5. 🔲 **Commit & push final state**
+1. 🔲 **End-to-end test** — send message in Instagram DM, verify AI operator flow works
+2. 🔲 **Commit & push final state**
 
 ## Known Issues
 

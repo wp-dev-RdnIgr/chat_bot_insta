@@ -12,10 +12,7 @@
       "name": "Webhook POST (Messages)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        260,
-        300
-      ],
+      "position": [260, 300],
       "webhookId": "instagram-webhook"
     },
     {
@@ -29,10 +26,7 @@
       "name": "Webhook GET (Verify)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        260,
-        520
-      ],
+      "position": [260, 520],
       "webhookId": "instagram-webhook-verify"
     },
     {
@@ -45,10 +39,7 @@
       "name": "Verify Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [
-        500,
-        520
-      ]
+      "position": [500, 520]
     },
     {
       "parameters": {
@@ -78,10 +69,7 @@
       "name": "Filter: Has Message",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2,
-      "position": [
-        480,
-        300
-      ]
+      "position": [480, 300]
     },
     {
       "parameters": {
@@ -93,23 +81,143 @@
       "name": "Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [
-        700,
-        300
-      ]
+      "position": [700, 300]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Bloom Beauty Studio — Instagram Booking Bot\n// Main conversation engine (n8n Code node v2 — uses helpers.httpRequest)\n// ============================================================\n\nconst SUPABASE_URL = 'https://saajgmcaohjqtxufffid.supabase.co';\nconst SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0';\nconst ACCESS_TOKEN = 'IGAAVQ2FGSYClBZAFp4RHNiSEhqUWRuaTZAPbUFBTDBjTUZAmNF9oU1hHZAE92NGVOWnBJdjlCY2lHeEhTcVRDcGhxUjl2TFg5MW5kMVV3cTFlVS1hbl9xVllIOEZAXOHdFUXFjcXQwbjZAMeTNLUmdaU0ZAnOWIxZAnM0ZAG1NTEdmTks2YwZDZD';\n\n// --- Extract message data ---\nconst entry = $input.first().json.body.entry[0];\nconst messaging = entry.messaging[0];\nconst senderId = messaging.sender.id;\nconst messageObj = messaging.message;\nconst quickReplyPayload = messageObj.quick_reply?.payload || null;\nconst messageText = (messageObj.text || '').trim();\nconst msgLower = messageText.toLowerCase();\n\n// --- Supabase REST helpers (using helpers.httpRequest) ---\nasync function supabaseGet(table, query = '') {\n  return await helpers.httpRequest({\n    method: 'GET',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${query}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    }\n  });\n}\n\nasync function supabasePost(table, data) {\n  return await helpers.httpRequest({\n    method: 'POST',\n    url: `${SUPABASE_URL}/rest/v1/${table}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    },\n    body: data\n  });\n}\n\nasync function supabasePatch(table, query, data) {\n  return await helpers.httpRequest({\n    method: 'PATCH',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${query}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    },\n    body: data\n  });\n}\n\nasync function supabaseRpc(fnName, args) {\n  return await helpers.httpRequest({\n    method: 'POST',\n    url: `${SUPABASE_URL}/rest/v1/rpc/${fnName}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json'\n    },\n    body: args\n  });\n}\n\n// --- Fetch Instagram user profile ---\nasync function getInstagramProfile(userId) {\n  try {\n    const profile = await helpers.httpRequest({\n      method: 'GET',\n      url: `https://graph.instagram.com/v21.0/${userId}?fields=name,username&access_token=${ACCESS_TOKEN}`,\n      headers: { 'Content-Type': 'application/json' }\n    });\n    return profile;\n  } catch (e) {\n    return {};\n  }\n}\n\n// --- Get or create client ---\nlet clients = await supabaseGet('clients', `instagram_id=eq.${senderId}`);\nlet client;\nif (clients.length === 0) {\n  const profile = await getInstagramProfile(senderId);\n  const clientData = {\n    instagram_id: senderId,\n    instagram_username: profile.username || null,\n    name: profile.name || null,\n    last_visit: new Date().toISOString()\n  };\n  const created = await supabasePost('clients', clientData);\n  client = Array.isArray(created) ? created[0] : created;\n} else {\n  client = clients[0];\n  // Update last_visit and fill missing profile data\n  const updates = { last_visit: new Date().toISOString() };\n  if (!client.instagram_username || !client.name) {\n    const profile = await getInstagramProfile(senderId);\n    if (profile.username && !client.instagram_username) updates.instagram_username = profile.username;\n    if (profile.name && !client.name) updates.name = profile.name;\n  }\n  await supabasePatch('clients', `id=eq.${client.id}`, updates);\n}\nconst clientId = client.id;\n\n// --- Get or create conversation ---\nlet convos = await supabaseGet('conversations', `client_id=eq.${clientId}`);\nlet convo;\nif (convos.length === 0) {\n  const created = await supabasePost('conversations', { client_id: clientId, current_step: 'GREETING' });\n  convo = Array.isArray(created) ? created[0] : created;\n} else {\n  convo = convos[0];\n}\n\nlet currentStep = convo.current_step;\nlet replyText = '';\nlet quickReplies = [];\n\n// --- Helper: format date in Ukrainian ---\nconst DAY_NAMES = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];\nconst MONTH_NAMES = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',\n                     'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];\n\nfunction formatDate(dateStr) {\n  const d = new Date(dateStr + 'T00:00:00');\n  const day = DAY_NAMES[d.getDay()];\n  const num = d.getDate();\n  const month = MONTH_NAMES[d.getMonth()];\n  return `${day}, ${num} ${month}`;\n}\n\nfunction formatTime(timeStr) {\n  return timeStr.substring(0, 5); // HH:MM\n}\n\n// --- Category Quick Replies ---\nconst CATEGORIES = ['Ногті', 'Вії', 'Брови', 'Волосся'];\nconst CATEGORY_EMOJI = { 'Ногті': '💅', 'Вії': '👁', 'Брови': '✨', 'Волосся': '💇‍♀️' };\n\nfunction categoryQuickReplies() {\n  return CATEGORIES.map(cat => ({\n    content_type: 'text',\n    title: `${CATEGORY_EMOJI[cat] || ''} ${cat}`,\n    payload: `CAT_${cat}`\n  }));\n}\n\n// --- Update conversation state ---\nasync function updateConvo(fields) {\n  fields.updated_at = new Date().toISOString();\n  await supabasePatch('conversations', `client_id=eq.${clientId}`, fields);\n}\n\n// =========================\n// SPECIAL COMMANDS (any step)\n// =========================\nconst isCancel = /^(відміна|відмінити|заново|спочатку|скасувати|отмена|отменить|сначала)$/i.test(msgLower);\nconst isMyBookings = /^(мої записи|мои записи|записи)$/i.test(msgLower);\nconst isPriceList = /^(прайс|ціни|цены|цена|ціна|вартість|стоимость)$/i.test(msgLower);\n\nif (isCancel) {\n  await updateConvo({ current_step: 'GREETING', selected_category: null, selected_service_id: null, selected_master_id: null, selected_slot_id: null });\n  replyText = 'Добре, почнемо спочатку! 🔄\\n\\nОберіть категорію послуг:';\n  quickReplies = categoryQuickReplies();\n\n} else if (isMyBookings) {\n  const today = new Date().toISOString().split('T')[0];\n  const bookings = await supabaseGet('bookings',\n    `client_id=eq.${clientId}&status=eq.confirmed&date=gte.${today}&select=id,date,start_time,service_id(name,price),master_id(name)&order=date.asc,start_time.asc`);\n\n  if (bookings.length === 0) {\n    replyText = 'У вас поки немає активних записів. Бажаєте записатися? 😊';\n    quickReplies = categoryQuickReplies();\n  } else {\n    replyText = '📋 Ваші записи:\\n\\n';\n    bookings.forEach((b, i) => {\n      const svcName = b.service_id?.name || 'Послуга';\n      const masterName = b.master_id?.name || 'Майстер';\n      replyText += `${i+1}. ${svcName} — ${masterName}\\n   📅 ${formatDate(b.date)}, ${formatTime(b.start_time)}\\n\\n`;\n    });\n  }\n\n} else if (isPriceList) {\n  const services = await supabaseGet('services', 'is_active=eq.true&order=category.asc,price.asc');\n  replyText = '💰 Прайс-лист Bloom Beauty Studio:\\n\\n';\n  let lastCat = '';\n  services.forEach(s => {\n    if (s.category !== lastCat) {\n      lastCat = s.category;\n      replyText += `${CATEGORY_EMOJI[s.category] || ''} ${s.category}:\\n`;\n    }\n    replyText += `  • ${s.name} — ${s.price} грн (${s.duration_minutes} хв)\\n`;\n  });\n  replyText += '\\nОберіть категорію для запису:';\n  quickReplies = categoryQuickReplies();\n\n// =========================\n// MAIN CONVERSATION FLOW\n// =========================\n} else if (currentStep === 'GREETING') {\n  // Check if user selected a category (via quick reply or text)\n  let selectedCat = null;\n  if (quickReplyPayload && quickReplyPayload.startsWith('CAT_')) {\n    selectedCat = quickReplyPayload.replace('CAT_', '');\n  } else {\n    // Try to match category from text\n    for (const cat of CATEGORIES) {\n      if (msgLower.includes(cat.toLowerCase())) {\n        selectedCat = cat;\n        break;\n      }\n    }\n  }\n\n  if (selectedCat) {\n    // User selected a category — move to SELECT_SERVICE\n    const services = await supabaseGet('services', `category=eq.${encodeURIComponent(selectedCat)}&is_active=eq.true&order=price.asc`);\n\n    if (services.length === 0) {\n      replyText = `На жаль, послуг у категорії \"${selectedCat}\" зараз немає. Оберіть іншу категорію:`;\n      quickReplies = categoryQuickReplies();\n    } else {\n      await updateConvo({ current_step: 'SELECT_SERVICE', selected_category: selectedCat });\n      replyText = `${CATEGORY_EMOJI[selectedCat] || ''} Послуги — ${selectedCat}:\\n\\n`;\n      services.forEach((s, i) => {\n        replyText += `${i+1}. ${s.name} — ${s.price} грн (${s.duration_minutes} хв)\\n`;\n      });\n      replyText += '\\nОберіть послугу:';\n      quickReplies = services.map(s => ({\n        content_type: 'text',\n        title: s.name,\n        payload: `SVC_${s.id}`\n      }));\n    }\n  } else {\n    // First message or unrecognized — show greeting\n    replyText = 'Привіт! 👋 Я бот-адміністратор Bloom Beauty Studio.\\n\\nМожу записати вас на процедуру. Оберіть категорію:';\n    quickReplies = categoryQuickReplies();\n  }\n\n} else if (currentStep === 'SELECT_SERVICE') {\n  // User should select a service\n  let selectedServiceId = null;\n\n  if (quickReplyPayload && quickReplyPayload.startsWith('SVC_')) {\n    selectedServiceId = quickReplyPayload.replace('SVC_', '');\n  } else {\n    // Try to find service by name in selected category\n    const services = await supabaseGet('services',\n      `category=eq.${encodeURIComponent(convo.selected_category)}&is_active=eq.true`);\n    const match = services.find(s => msgLower.includes(s.name.toLowerCase()));\n    if (match) selectedServiceId = match.id;\n  }\n\n  if (!selectedServiceId) {\n    replyText = 'Я не зрозумів вибір 🤔 Оберіть послугу зі списку або напишіть \"спочатку\" щоб почати заново.';\n    // Re-show services\n    const services = await supabaseGet('services',\n      `category=eq.${encodeURIComponent(convo.selected_category)}&is_active=eq.true&order=price.asc`);\n    quickReplies = services.map(s => ({\n      content_type: 'text',\n      title: s.name,\n      payload: `SVC_${s.id}`\n    }));\n  } else {\n    // Get masters who do this service\n    const masterServices = await supabaseGet('master_services',\n      `service_id=eq.${selectedServiceId}&select=master_id(id,name,is_active)`);\n    const activeMasters = masterServices\n      .map(ms => ms.master_id)\n      .filter(m => m && m.is_active);\n\n    if (activeMasters.length === 0) {\n      replyText = 'На жаль, зараз немає вільних майстрів для цієї послуги. Спробуйте іншу послугу.';\n      await updateConvo({ current_step: 'GREETING', selected_category: null });\n      quickReplies = categoryQuickReplies();\n    } else if (activeMasters.length === 1) {\n      // Auto-select single master, go to SELECT_DATE\n      const master = activeMasters[0];\n      await updateConvo({\n        current_step: 'SELECT_DATE',\n        selected_service_id: selectedServiceId,\n        selected_master_id: master.id\n      });\n\n      // Get available dates\n      const today = new Date().toISOString().split('T')[0];\n      const slots = await supabaseGet('schedule_slots',\n        `master_id=eq.${master.id}&is_booked=eq.false&date=gte.${today}&order=date.asc&select=date`);\n\n      const uniqueDates = [...new Set(slots.map(s => s.date))].slice(0, 5);\n\n      if (uniqueDates.length === 0) {\n        replyText = `Майстер ${master.name} — на жаль, немає вільних дат. Спробуйте іншу послугу.`;\n        await updateConvo({ current_step: 'GREETING', selected_category: null, selected_service_id: null, selected_master_id: null });\n        quickReplies = categoryQuickReplies();\n      } else {\n        replyText = `Ваш майстер: ${master.name} 👩‍🎨\\n\\nОберіть дату:`;\n        quickReplies = uniqueDates.map(d => ({\n          content_type: 'text',\n          title: formatDate(d),\n          payload: `DATE_${d}`\n        }));\n      }\n    } else {\n      // Multiple masters — let user choose\n      await updateConvo({ current_step: 'SELECT_MASTER', selected_service_id: selectedServiceId });\n      replyText = 'Оберіть майстра:\\n\\n';\n      activeMasters.forEach((m, i) => {\n        replyText += `${i+1}. ${m.name}\\n`;\n      });\n      quickReplies = activeMasters.map(m => ({\n        content_type: 'text',\n        title: m.name,\n        payload: `MASTER_${m.id}`\n      }));\n    }\n  }\n\n} else if (currentStep === 'SELECT_MASTER') {\n  let selectedMasterId = null;\n\n  if (quickReplyPayload && quickReplyPayload.startsWith('MASTER_')) {\n    selectedMasterId = quickReplyPayload.replace('MASTER_', '');\n  } else {\n    // Try match by name\n    const masterServices = await supabaseGet('master_services',\n      `service_id=eq.${convo.selected_service_id}&select=master_id(id,name,is_active)`);\n    const activeMasters = masterServices.map(ms => ms.master_id).filter(m => m && m.is_active);\n    const match = activeMasters.find(m => msgLower.includes(m.name.toLowerCase()));\n    if (match) selectedMasterId = match.id;\n  }\n\n  if (!selectedMasterId) {\n    replyText = 'Я не зрозумів вибір 🤔 Оберіть майстра зі списку або напишіть \"спочатку\".';\n    const masterServices = await supabaseGet('master_services',\n      `service_id=eq.${convo.selected_service_id}&select=master_id(id,name,is_active)`);\n    const activeMasters = masterServices.map(ms => ms.master_id).filter(m => m && m.is_active);\n    quickReplies = activeMasters.map(m => ({\n      content_type: 'text',\n      title: m.name,\n      payload: `MASTER_${m.id}`\n    }));\n  } else {\n    await updateConvo({ current_step: 'SELECT_DATE', selected_master_id: selectedMasterId });\n\n    const today = new Date().toISOString().split('T')[0];\n    const slots = await supabaseGet('schedule_slots',\n      `master_id=eq.${selectedMasterId}&is_booked=eq.false&date=gte.${today}&order=date.asc&select=date`);\n\n    const uniqueDates = [...new Set(slots.map(s => s.date))].slice(0, 5);\n\n    if (uniqueDates.length === 0) {\n      replyText = 'На жаль, у цього майстра немає вільних дат. Спробуйте іншого майстра або іншу послугу.';\n      await updateConvo({ current_step: 'GREETING', selected_category: null, selected_service_id: null, selected_master_id: null });\n      quickReplies = categoryQuickReplies();\n    } else {\n      replyText = 'Оберіть зручну дату:';\n      quickReplies = uniqueDates.map(d => ({\n        content_type: 'text',\n        title: formatDate(d),\n        payload: `DATE_${d}`\n      }));\n    }\n  }\n\n} else if (currentStep === 'SELECT_DATE') {\n  let selectedDate = null;\n\n  if (quickReplyPayload && quickReplyPayload.startsWith('DATE_')) {\n    selectedDate = quickReplyPayload.replace('DATE_', '');\n  }\n\n  if (!selectedDate) {\n    replyText = 'Оберіть дату зі списку або напишіть \"спочатку\" щоб почати заново.';\n    const today = new Date().toISOString().split('T')[0];\n    const slots = await supabaseGet('schedule_slots',\n      `master_id=eq.${convo.selected_master_id}&is_booked=eq.false&date=gte.${today}&order=date.asc&select=date`);\n    const uniqueDates = [...new Set(slots.map(s => s.date))].slice(0, 5);\n    quickReplies = uniqueDates.map(d => ({\n      content_type: 'text',\n      title: formatDate(d),\n      payload: `DATE_${d}`\n    }));\n  } else {\n    // Get service duration to find consecutive slots\n    const svcArr = await supabaseGet('services', `id=eq.${convo.selected_service_id}`);\n    const service = svcArr[0];\n    const slotsNeeded = Math.ceil(service.duration_minutes / 30);\n\n    // Get all free slots on this date for this master\n    const allSlots = await supabaseGet('schedule_slots',\n      `master_id=eq.${convo.selected_master_id}&date=eq.${selectedDate}&is_booked=eq.false&order=start_time.asc`);\n\n    // Find consecutive groups\n    const availableTimes = [];\n    for (let i = 0; i <= allSlots.length - slotsNeeded; i++) {\n      let consecutive = true;\n      for (let j = 1; j < slotsNeeded; j++) {\n        const prev = allSlots[i + j - 1];\n        const curr = allSlots[i + j];\n        if (prev.end_time !== curr.start_time) {\n          consecutive = false;\n          break;\n        }\n      }\n      if (consecutive) {\n        availableTimes.push(allSlots[i]);\n      }\n    }\n\n    if (availableTimes.length === 0) {\n      replyText = 'На жаль, на цю дату немає достатньо вільного часу для обраної послуги. Оберіть іншу дату:';\n      const today = new Date().toISOString().split('T')[0];\n      const slots = await supabaseGet('schedule_slots',\n        `master_id=eq.${convo.selected_master_id}&is_booked=eq.false&date=gte.${today}&order=date.asc&select=date`);\n      const uniqueDates = [...new Set(slots.map(s => s.date))].slice(0, 5);\n      quickReplies = uniqueDates.map(d => ({\n        content_type: 'text',\n        title: formatDate(d),\n        payload: `DATE_${d}`\n      }));\n    } else {\n      // Store date context temporarily via slot selection\n      await updateConvo({ current_step: 'SELECT_TIME' });\n\n      replyText = `📅 ${formatDate(selectedDate)}\\n\\nОберіть час:`;\n      quickReplies = availableTimes.slice(0, 13).map(s => ({\n        content_type: 'text',\n        title: formatTime(s.start_time),\n        payload: `SLOT_${s.id}`\n      }));\n    }\n  }\n\n} else if (currentStep === 'SELECT_TIME') {\n  let selectedSlotId = null;\n\n  if (quickReplyPayload && quickReplyPayload.startsWith('SLOT_')) {\n    selectedSlotId = quickReplyPayload.replace('SLOT_', '');\n  }\n\n  if (!selectedSlotId) {\n    replyText = 'Оберіть час зі списку або напишіть \"спочатку\" щоб почати заново.';\n  } else {\n    // Get full details for confirmation\n    const svcArr = await supabaseGet('services', `id=eq.${convo.selected_service_id}`);\n    const masterArr = await supabaseGet('masters', `id=eq.${convo.selected_master_id}`);\n    const slotArr = await supabaseGet('schedule_slots', `id=eq.${selectedSlotId}`);\n\n    const service = svcArr[0];\n    const master = masterArr[0];\n    const slot = slotArr[0];\n\n    await updateConvo({ current_step: 'CONFIRM', selected_slot_id: selectedSlotId });\n\n    replyText = `📋 Ваш запис:\\n\\n` +\n      `• Послуга: ${service.name}\\n` +\n      `• Майстер: ${master.name}\\n` +\n      `• Дата: ${formatDate(slot.date)}, ${formatTime(slot.start_time)}\\n` +\n      `• Вартість: ${service.price} грн\\n` +\n      `• Тривалість: ${service.duration_minutes} хв\\n\\n` +\n      `Підтвердити?`;\n\n    quickReplies = [\n      { content_type: 'text', title: 'Так ✅', payload: 'CONFIRM_YES' },\n      { content_type: 'text', title: 'Ні, спочатку 🔄', payload: 'CONFIRM_NO' }\n    ];\n  }\n\n} else if (currentStep === 'CONFIRM') {\n  const isYes = quickReplyPayload === 'CONFIRM_YES' ||\n    /^(так|да|yes|підтверд)/i.test(msgLower);\n  const isNo = quickReplyPayload === 'CONFIRM_NO' ||\n    /^(ні|нет|no)/i.test(msgLower);\n\n  if (isYes) {\n    // Create booking\n    const svcArr = await supabaseGet('services', `id=eq.${convo.selected_service_id}`);\n    const service = svcArr[0];\n    const slotArr = await supabaseGet('schedule_slots', `id=eq.${convo.selected_slot_id}`);\n    const slot = slotArr[0];\n    const slotsNeeded = Math.ceil(service.duration_minutes / 30);\n\n    // Mark all consecutive slots as booked\n    const allSlots = await supabaseGet('schedule_slots',\n      `master_id=eq.${convo.selected_master_id}&date=eq.${slot.date}&start_time=gte.${slot.start_time}&is_booked=eq.false&order=start_time.asc&limit=${slotsNeeded}`);\n\n    for (const s of allSlots) {\n      await supabasePatch('schedule_slots', `id=eq.${s.id}`, { is_booked: true });\n    }\n\n    // Create booking record\n    await supabasePost('bookings', {\n      client_id: clientId,\n      master_id: convo.selected_master_id,\n      service_id: convo.selected_service_id,\n      slot_id: convo.selected_slot_id,\n      date: slot.date,\n      start_time: slot.start_time,\n      status: 'confirmed'\n    });\n\n    // Reset conversation\n    await updateConvo({\n      current_step: 'GREETING',\n      selected_category: null,\n      selected_service_id: null,\n      selected_master_id: null,\n      selected_slot_id: null\n    });\n\n    replyText = '✅ Готово! Вас записано.\\n\\n' +\n      'Я нагадаю за 24 години до візиту.\\n' +\n      'Якщо потрібно скасувати або перенести — просто напишіть мені.\\n\\n' +\n      'Бажаєте записатися ще на щось? 😊';\n    quickReplies = categoryQuickReplies();\n\n  } else if (isNo) {\n    await updateConvo({\n      current_step: 'GREETING',\n      selected_category: null,\n      selected_service_id: null,\n      selected_master_id: null,\n      selected_slot_id: null\n    });\n    replyText = 'Добре, почнемо спочатку! 🔄\\n\\nОберіть категорію послуг:';\n    quickReplies = categoryQuickReplies();\n  } else {\n    replyText = 'Підтвердіть запис: Так ✅ або Ні 🔄';\n    quickReplies = [\n      { content_type: 'text', title: 'Так ✅', payload: 'CONFIRM_YES' },\n      { content_type: 'text', title: 'Ні, спочатку 🔄', payload: 'CONFIRM_NO' }\n    ];\n  }\n\n} else {\n  // Unknown step — reset\n  await updateConvo({ current_step: 'GREETING', selected_category: null, selected_service_id: null, selected_master_id: null, selected_slot_id: null });\n  replyText = 'Щось пішло не так. Почнемо спочатку! 🔄\\n\\nОберіть категорію послуг:';\n  quickReplies = categoryQuickReplies();\n}\n\n// --- Build Instagram message payload ---\nconst messagePayload = { text: replyText };\nif (quickReplies.length > 0) {\n  messagePayload.quick_replies = quickReplies.slice(0, 13);\n}\n\nreturn [{\n  json: {\n    senderId: senderId,\n    messagePayload: messagePayload,\n    accessToken: ACCESS_TOKEN\n  }\n}];"
+        "jsCode": "// ============================================================\n// Bloom Beauty Studio — Prepare Context for AI Operator\n// Fetches client, services, masters, bookings from Supabase\n// Builds system prompt with full business context\n// ============================================================\n\nconst SUPABASE_URL = 'https://saajgmcaohjqtxufffid.supabase.co';\nconst SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0';\nconst ACCESS_TOKEN = 'IGAAVQ2FGSYClBZAFp4RHNiSEhqUWRuaTZAPbUFBTDBjTUZAmNF9oU1hHZAE92NGVOWnBJdjlCY2lHeEhTcVRDcGhxUjl2TFg5MW5kMVV3cTFlVS1hbl9xVllIOEZAXOHdFUXFjcXQwbjZAMeTNLUmdaU0ZAnOWIxZAnM0ZAG1NTEdmTks2YwZDZD';\n\n// --- Extract message data ---\nconst entry = $input.first().json.body.entry[0];\nconst messaging = entry.messaging[0];\nconst senderId = messaging.sender.id;\nconst messageObj = messaging.message;\nconst messageText = (messageObj.text || '').trim();\n\n// --- Supabase REST helpers ---\nasync function supabaseGet(table, query = '') {\n  return await helpers.httpRequest({\n    method: 'GET',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${query}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    }\n  });\n}\n\nasync function supabasePost(table, data) {\n  return await helpers.httpRequest({\n    method: 'POST',\n    url: `${SUPABASE_URL}/rest/v1/${table}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    },\n    body: data\n  });\n}\n\nasync function supabasePatch(table, query, data) {\n  return await helpers.httpRequest({\n    method: 'PATCH',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${query}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    },\n    body: data\n  });\n}\n\n// --- Fetch Instagram user profile ---\nasync function getInstagramProfile(userId) {\n  try {\n    return await helpers.httpRequest({\n      method: 'GET',\n      url: `https://graph.instagram.com/v21.0/${userId}?fields=name,username&access_token=${ACCESS_TOKEN}`,\n      headers: { 'Content-Type': 'application/json' }\n    });\n  } catch (e) {\n    return {};\n  }\n}\n\n// --- Get or create client ---\nlet clients = await supabaseGet('clients', `instagram_id=eq.${senderId}`);\nlet client;\nif (clients.length === 0) {\n  const profile = await getInstagramProfile(senderId);\n  const created = await supabasePost('clients', {\n    instagram_id: senderId,\n    instagram_username: profile.username || null,\n    name: profile.name || null,\n    last_visit: new Date().toISOString()\n  });\n  client = Array.isArray(created) ? created[0] : created;\n} else {\n  client = clients[0];\n  const updates = { last_visit: new Date().toISOString() };\n  if (!client.instagram_username || !client.name) {\n    const profile = await getInstagramProfile(senderId);\n    if (profile.username && !client.instagram_username) updates.instagram_username = profile.username;\n    if (profile.name && !client.name) updates.name = profile.name;\n  }\n  await supabasePatch('clients', `id=eq.${client.id}`, updates);\n}\n\n// --- Fetch business data ---\nconst services = await supabaseGet('services', 'is_active=eq.true&order=category.asc,price.asc');\nconst masters = await supabaseGet('masters', 'is_active=eq.true');\nconst masterServices = await supabaseGet('master_services', 'select=master_id,service_id');\n\n// --- Fetch today's date (Kyiv) ---\nconst now = new Date();\nconst kyivFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' });\nconst today = kyivFormatter.format(now);\n\n// --- Fetch available dates per master (single query) ---\nconst allFreeSlots = await supabaseGet('schedule_slots',\n  `is_booked=eq.false&date=gte.${today}&order=master_id.asc,date.asc&select=master_id,date`);\n\nconst availableDates = {};\nfor (const slot of allFreeSlots) {\n  if (!availableDates[slot.master_id]) availableDates[slot.master_id] = new Set();\n  availableDates[slot.master_id].add(slot.date);\n}\n\n// --- Fetch client's active bookings ---\nconst bookings = await supabaseGet('bookings',\n  `client_id=eq.${client.id}&status=eq.confirmed&date=gte.${today}&select=id,date,start_time,service_id(name,price),master_id(name)&order=date.asc,start_time.asc`);\n\n// --- Build master-service mapping ---\nconst masterServiceMap = {};\nfor (const ms of masterServices) {\n  if (!masterServiceMap[ms.master_id]) masterServiceMap[ms.master_id] = [];\n  masterServiceMap[ms.master_id].push(ms.service_id);\n}\n\n// --- Build system prompt ---\nlet servicesList = '';\nservices.forEach(s => {\n  servicesList += `  - ID: ${s.id} | ${s.name} | Категорія: ${s.category} | ${s.price} грн | ${s.duration_minutes} хв\\n`;\n});\n\nlet mastersList = '';\nmasters.forEach(m => {\n  const svcIds = masterServiceMap[m.id] || [];\n  const svcNames = svcIds.map(sid => {\n    const svc = services.find(s => s.id === sid);\n    return svc ? svc.name : '';\n  }).filter(Boolean).join(', ');\n  const dates = [...(availableDates[m.id] || [])].slice(0, 10).join(', ');\n  mastersList += `  - ID: ${m.id} | ${m.name} | Послуги: ${svcNames} | Вільні дати: ${dates || 'немає'}\\n`;\n});\n\nlet bookingsList = '';\nif (bookings.length > 0) {\n  bookings.forEach(b => {\n    const svcName = b.service_id?.name || 'Послуга';\n    const masterName = b.master_id?.name || 'Майстер';\n    const time = (b.start_time || '').substring(0, 5);\n    bookingsList += `  - ID: ${b.id} | ${svcName} у ${masterName}, ${b.date} о ${time}\\n`;\n  });\n} else {\n  bookingsList = '  Немає активних записів.\\n';\n}\n\nconst systemPrompt = `Ти — AI-адміністратор салону краси \"Bloom Beauty Studio\". Ти спілкуєшся з клієнтами через Instagram Direct.\n\n# ПРАВИЛА\n1. Відповідай ТІЛЬКИ українською мовою, навіть якщо клієнт пише російською чи англійською.\n2. Будь привітним, ввічливим та професійним. Використовуй емоджі помірно.\n3. Не вигадуй інформацію. Користуйся тільки даними нижче та інструментами.\n4. Відповідай коротко та по суті — це Instagram чат, не email.\n5. Не використовуй markdown-форматування (жирний, курсив, заголовки) — Instagram їх не підтримує.\n6. Максимальна довжина відповіді — 900 символів.\n7. Якщо клієнт запитує щось не повʼязане з салоном — ввічливо поверни розмову до послуг.\n\n# ПОСЛУГИ\n${servicesList}\n# МАЙСТРИ\n${mastersList}\n# АКТИВНІ ЗАПИСИ КЛІЄНТА\n${bookingsList}\n# ДАНІ КЛІЄНТА\n- Client ID: ${client.id}\n- Імʼя: ${client.name || 'невідомо'}\n- Instagram: @${client.instagram_username || 'невідомо'}\n\n# СЬОГОДНІ\n${today} (часовий пояс Europe/Kyiv)\n\n# ЯК ЗАПИСАТИ КЛІЄНТА\n1. Зʼясуй яка послуга потрібна клієнту. Запропонуй варіанти з прайс-листа.\n2. Допоможи обрати майстра (покажи хто робить цю послугу).\n3. Коли клієнт обрав послугу та майстра — використай інструмент find_available_times щоб перевірити вільний час на конкретну дату. Передай duration_minutes з прайс-листа.\n4. Запропонуй клієнту вільні години.\n5. Коли клієнт підтвердив час — використай інструмент create_booking. Передай slot_id з результату find_available_times.\n6. Після успішного бронювання повідом клієнта.\n\n# СКАСУВАННЯ\nНа даний момент скасування записів не підтримується автоматично. Попроси клієнта звʼязатися з салоном за телефоном.\n\n# ВАЖЛИВО\n- Завжди перевіряй доступність через find_available_times перед бронюванням.\n- Не бронюй без явного підтвердження клієнта.\n- Якщо клієнт просить прайс — покажи послуги з цінами.\n- Якщо клієнт просить свої записи — покажи зі списку активних записів вище.`;\n\nreturn [{\n  json: {\n    userMessage: messageText,\n    systemPrompt: systemPrompt,\n    senderId: senderId,\n    clientId: client.id,\n    accessToken: ACCESS_TOKEN\n  }\n}];"
       },
-      "id": "bot-engine",
-      "name": "Bot Engine",
+      "id": "prepare-context",
+      "name": "Prepare Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        920,
-        300
-      ]
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.userMessage }}",
+        "options": {
+          "systemMessage": "={{ $json.systemPrompt }}",
+          "maxIterations": 5
+        }
+      },
+      "id": "ai-operator",
+      "name": "AI Operator",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {
+          "temperature": 0.4
+        }
+      },
+      "id": "openai-chat-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [1060, 520],
+      "credentials": {
+        "openAiApi": {
+          "id": "b1hLC5E1Ad7p27A9",
+          "name": "OpenAi - course generator"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Prepare Context').item.json.senderId }}",
+        "contextWindowLength": 20
+      },
+      "id": "memory-buffer",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [1180, 520]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Find available appointment time slots for a specific master on a specific date. Returns a list of available slot_id and start_time pairs. You MUST call this before creating a booking to get the correct slot_id. Parameters: master_id (UUID), date (YYYY-MM-DD), duration_minutes (integer from the service price list).",
+        "method": "POST",
+        "url": "https://saajgmcaohjqtxufffid.supabase.co/rest/v1/rpc/find_available_times",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_master_id\": \"{{ $fromAI('master_id', 'UUID of the master from the masters list') }}\",\n  \"p_date\": \"{{ $fromAI('date', 'Appointment date in YYYY-MM-DD format') }}\",\n  \"p_duration_minutes\": {{ $fromAI('duration_minutes', 'Service duration in minutes from the price list, as integer') }}\n}",
+        "options": {}
+      },
+      "id": "tool-find-times",
+      "name": "Find Available Times",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [1300, 520]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Create a confirmed booking for the client. Call this ONLY after the client has explicitly confirmed the appointment time. Parameters: client_id (UUID from context), master_id (UUID), service_id (UUID), slot_id (UUID obtained from find_available_times tool).",
+        "method": "POST",
+        "url": "https://saajgmcaohjqtxufffid.supabase.co/rest/v1/rpc/create_booking",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_client_id\": \"{{ $fromAI('client_id', 'UUID of the client from the system context') }}\",\n  \"p_master_id\": \"{{ $fromAI('master_id', 'UUID of the master') }}\",\n  \"p_service_id\": \"{{ $fromAI('service_id', 'UUID of the service') }}\",\n  \"p_slot_id\": \"{{ $fromAI('slot_id', 'UUID of the time slot from find_available_times result') }}\"\n}",
+        "options": {}
+      },
+      "id": "tool-create-booking",
+      "name": "Create Booking",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [1420, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Format AI response for Instagram DM\n// ============================================================\n\nconst aiOutput = $json.output || 'Вибачте, сталася помилка. Спробуйте ще раз.';\nconst prepareData = $('Prepare Context').first().json;\nconst senderId = prepareData.senderId;\nconst accessToken = prepareData.accessToken;\n\n// Truncate if too long for Instagram (max ~1000 chars)\nlet replyText = aiOutput;\nif (replyText.length > 950) {\n  replyText = replyText.substring(0, 947) + '...';\n}\n\nreturn [{\n  json: {\n    senderId: senderId,\n    messagePayload: { text: replyText },\n    accessToken: accessToken\n  }\n}];"
+      },
+      "id": "format-reply",
+      "name": "Format Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300]
     },
     {
       "parameters": {
@@ -135,10 +243,7 @@
       "name": "Send Reply to Instagram",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1160,
-        300
-      ]
+      "position": [1680, 300]
     }
   ],
   "connections": {
@@ -179,19 +284,85 @@
       "main": [
         [
           {
-            "node": "Bot Engine",
+            "node": "Prepare Context",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Bot Engine": {
+    "Prepare Context": {
+      "main": [
+        [
+          {
+            "node": "AI Operator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Operator": {
+      "main": [
+        [
+          {
+            "node": "Format Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Reply": {
       "main": [
         [
           {
             "node": "Send Reply to Instagram",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Operator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Operator",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Available Times": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Operator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Booking": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Operator",
+            "type": "ai_tool",
             "index": 0
           }
         ]
@@ -213,6 +384,10 @@
     {
       "name": "booking",
       "id": "3"
+    },
+    {
+      "name": "ai-agent",
+      "id": "4"
     }
   ]
 }
