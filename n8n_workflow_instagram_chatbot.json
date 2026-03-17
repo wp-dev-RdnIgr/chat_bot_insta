@@ -51,22 +51,13 @@
           },
           "conditions": [
             {
-              "id": "condition-check-message",
-              "leftValue": "={{ $json.body.entry[0].messaging[0].message }}",
+              "id": "condition-has-text",
+              "leftValue": "={{ $json.body.entry[0].messaging[0].message.text }}",
               "rightValue": "",
               "operator": {
-                "type": "object",
+                "type": "string",
                 "operation": "exists",
                 "singleValue": true
-              }
-            },
-            {
-              "id": "condition-no-echo",
-              "leftValue": "={{ $json.body.entry[0].messaging[0].message.is_echo }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "notEqual"
               }
             }
           ],
