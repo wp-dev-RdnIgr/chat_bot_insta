@@ -415,9 +415,10 @@
                             <label for="name">Full Name</label>
                             <input type="text" id="name" name="name" required placeholder="John Smith">
                         </div>
-                        <div class="contact-form__field">
+                        <div class="contact-form__field" id="emailField">
                             <label for="email">Email</label>
                             <input type="email" id="email" name="email" required placeholder="john@company.com">
+                            <span class="field-error">Please enter a valid email address</span>
                         </div>
                     </div>
                     <div class="contact-form__field">
@@ -528,6 +529,18 @@
             </div>
         </div>
     </footer>
+
+    <!-- Success Modal -->
+    <div class="modal-overlay" id="successModal">
+        <div class="modal">
+            <div class="modal__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <h3 class="modal__title">Message Sent!</h3>
+            <p class="modal__text">Thank you for reaching out. We'll get back to you within 24 hours.</p>
+            <button class="modal__btn" id="modalClose">Got it</button>
+        </div>
+    </div>
 
     <script src="js/main.js"></script>
 </body>

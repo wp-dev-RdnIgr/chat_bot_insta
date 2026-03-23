@@ -107,23 +107,41 @@
 
     // ---------- Contact form ----------
     const form = document.getElementById('contactForm');
+    const emailInput = document.getElementById('email');
+    const emailField = document.getElementById('emailField');
+    const modal = document.getElementById('successModal');
+    const modalCloseBtn = document.getElementById('modalClose');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    // Live validation — clear error on valid input
+    emailInput.addEventListener('input', () => {
+        if (emailRegex.test(emailInput.value.trim())) {
+            emailField.classList.remove('has-error');
+        }
+    });
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
 
-        const btn = form.querySelector('button[type="submit"]');
-        const originalHTML = btn.innerHTML;
+        // Validate email
+        if (!emailRegex.test(emailInput.value.trim())) {
+            emailField.classList.add('has-error');
+            emailInput.focus();
+            return;
+        }
+        emailField.classList.remove('has-error');
 
-        btn.innerHTML = '<span>Message Sent!</span>';
-        btn.style.pointerEvents = 'none';
-        btn.style.opacity = '.7';
+        // Show success modal
+        modal.classList.add('active');
+        form.reset();
+    });
 
-        setTimeout(() => {
-            btn.innerHTML = originalHTML;
-            btn.style.pointerEvents = '';
-            btn.style.opacity = '';
-            form.reset();
-        }, 3000);
+    // Close modal
+    modalCloseBtn.addEventListener('click', () => {
+        modal.classList.remove('active');
+    });
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('active');
     });
 
     // ---------- Smooth scroll for Safari ----------

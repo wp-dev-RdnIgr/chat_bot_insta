@@ -852,6 +852,97 @@ button { cursor: pointer; }
     min-height: 100px;
 }
 
+/* Email validation error */
+.contact-form__field .field-error {
+    display: none;
+    color: #ff6b6b;
+    font-size: .78rem;
+    margin-top: 4px;
+}
+.contact-form__field.has-error input {
+    border-color: #ff6b6b;
+    box-shadow: 0 0 0 3px rgba(255,107,107,.15);
+}
+.contact-form__field.has-error .field-error {
+    display: block;
+}
+
+/* Success modal */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,.6);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .3s, visibility .3s;
+}
+.modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+.modal {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-xl);
+    padding: 48px 40px;
+    max-width: 420px;
+    width: 90%;
+    text-align: center;
+    transform: translateY(20px) scale(.96);
+    transition: transform .3s;
+}
+.modal-overlay.active .modal {
+    transform: translateY(0) scale(1);
+}
+.modal__icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--c-gradient);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+.modal__icon svg {
+    width: 32px;
+    height: 32px;
+    color: #fff;
+}
+.modal__title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--c-text-bright);
+    margin-bottom: 8px;
+}
+.modal__text {
+    color: var(--c-text-dim);
+    font-size: .95rem;
+    line-height: 1.6;
+    margin-bottom: 28px;
+}
+.modal__btn {
+    display: inline-block;
+    padding: .7rem 2rem;
+    border: none;
+    border-radius: var(--r-full);
+    background: var(--c-gradient);
+    color: #fff;
+    font-weight: 600;
+    font-size: .95rem;
+    cursor: pointer;
+    transition: opacity .2s;
+}
+.modal__btn:hover {
+    opacity: .85;
+}
+
 /* Info */
 .contact__info {
     display: flex;
