@@ -1,24 +1,33 @@
 {
-  "name": "Instagram Booking Bot — Nail Studio Kyiv OB + Google Calendar",
+  "updatedAt": "2026-04-01T18:31:49.170Z",
+  "createdAt": "2026-03-16T15:30:26.859Z",
+  "id": "5iXUqYa4eX72YBbP",
+  "name": "Instagram Booking Bot — Nail Studio Kyiv OB",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "nail-studio-webhook",
+        "path": "instagram-webhook",
         "responseMode": "responseNode",
         "options": {}
       },
       "id": "webhook-post",
-      "name": "Webhook POST (Messages)",
+      "name": "Webhook POST",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [260, 300],
-      "webhookId": "nail-studio-webhook"
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "instagram-webhook"
     },
     {
       "parameters": {
         "httpMethod": "GET",
-        "path": "nail-studio-webhook",
+        "path": "instagram-webhook",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -26,8 +35,11 @@
       "name": "Webhook GET (Verify)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [260, 520],
-      "webhookId": "nail-studio-webhook-verify"
+      "position": [
+        260,
+        520
+      ],
+      "webhookId": "instagram-webhook-verify"
     },
     {
       "parameters": {
@@ -39,7 +51,10 @@
       "name": "Verify Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [500, 520]
+      "position": [
+        500,
+        520
+      ]
     },
     {
       "parameters": {
@@ -51,7 +66,7 @@
           },
           "conditions": [
             {
-              "id": "condition-has-text",
+              "id": "has-text",
               "leftValue": "={{ $json.body.entry[0].messaging[0].message.text }}",
               "rightValue": "",
               "operator": {
@@ -65,11 +80,14 @@
         },
         "options": {}
       },
-      "id": "filter-messages",
+      "id": "filter-msg",
       "name": "Filter: Has Message",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2,
-      "position": [480, 300]
+      "position": [
+        480,
+        300
+      ]
     },
     {
       "parameters": {
@@ -77,21 +95,27 @@
         "responseBody": "={\"status\": \"ok\"}",
         "options": {}
       },
-      "id": "respond-ok-early",
+      "id": "respond-ok",
       "name": "Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [700, 300]
+      "position": [
+        700,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Nail Studio Kyiv OB — Prepare Context for AI Operator\n// Fetches client, services, masters, bookings from Supabase\n// Builds system prompt with full business context\n// ============================================================\n\nconst SUPABASE_URL = '__SUPABASE_URL__';\nconst SUPABASE_KEY = '__SUPABASE_SERVICE_ROLE_KEY__';\nconst ACCESS_TOKEN = '__INSTAGRAM_ACCESS_TOKEN__';\n\n// --- Extract message data ---\nconst entry = $input.first().json.body.entry[0];\nconst messaging = entry.messaging[0];\nconst senderId = messaging.sender.id;\nconst messageObj = messaging.message;\nconst messageText = (messageObj.text || '').trim();\n\n// --- Supabase REST helpers ---\nasync function supabaseGet(table, query = '') {\n  return await helpers.httpRequest({\n    method: 'GET',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${query}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    }\n  });\n}\n\nasync function supabasePost(table, data) {\n  return await helpers.httpRequest({\n    method: 'POST',\n    url: `${SUPABASE_URL}/rest/v1/${table}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    },\n    body: data\n  });\n}\n\nasync function supabasePatch(table, query, data) {\n  return await helpers.httpRequest({\n    method: 'PATCH',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${query}`,\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    },\n    body: data\n  });\n}\n\n// --- Fetch Instagram user profile ---\nasync function getInstagramProfile(userId) {\n  try {\n    return await helpers.httpRequest({\n      method: 'GET',\n      url: `https://graph.instagram.com/v21.0/${userId}?fields=name,username&access_token=${ACCESS_TOKEN}`,\n      headers: { 'Content-Type': 'application/json' }\n    });\n  } catch (e) {\n    return {};\n  }\n}\n\n// --- Get or create client ---\nlet clients = await supabaseGet('clients', `instagram_id=eq.${senderId}`);\nlet client;\nif (clients.length === 0) {\n  const profile = await getInstagramProfile(senderId);\n  const created = await supabasePost('clients', {\n    instagram_id: senderId,\n    instagram_username: profile.username || null,\n    name: profile.name || null,\n    last_visit: new Date().toISOString()\n  });\n  client = Array.isArray(created) ? created[0] : created;\n} else {\n  client = clients[0];\n  const updates = { last_visit: new Date().toISOString() };\n  if (!client.instagram_username || !client.name) {\n    const profile = await getInstagramProfile(senderId);\n    if (profile.username && !client.instagram_username) updates.instagram_username = profile.username;\n    if (profile.name && !client.name) updates.name = profile.name;\n  }\n  await supabasePatch('clients', `id=eq.${client.id}`, updates);\n}\n\n// --- Fetch business data ---\nconst services = await supabaseGet('services', 'is_active=eq.true&order=category.asc,price.asc');\nconst masters = await supabaseGet('masters', 'is_active=eq.true');\nconst masterServices = await supabaseGet('master_services', 'select=master_id,service_id');\n\n// --- Fetch today's date (Kyiv) ---\nconst now = new Date();\nconst kyivFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' });\nconst today = kyivFormatter.format(now);\n\n// --- Fetch available dates per master ---\nconst allFreeSlots = await supabaseGet('schedule_slots',\n  `is_booked=eq.false&date=gte.${today}&order=master_id.asc,date.asc&select=master_id,date`);\n\nconst availableDates = {};\nfor (const slot of allFreeSlots) {\n  if (!availableDates[slot.master_id]) availableDates[slot.master_id] = new Set();\n  availableDates[slot.master_id].add(slot.date);\n}\n\n// --- Fetch client's active bookings ---\nconst bookings = await supabaseGet('bookings',\n  `client_id=eq.${client.id}&status=eq.confirmed&date=gte.${today}&select=id,date,start_time,service_id(name,price),master_id(name)&order=date.asc,start_time.asc`);\n\n// --- Build master-service mapping ---\nconst masterServiceMap = {};\nfor (const ms of masterServices) {\n  if (!masterServiceMap[ms.master_id]) masterServiceMap[ms.master_id] = [];\n  masterServiceMap[ms.master_id].push(ms.service_id);\n}\n\n// --- Build service list ---\nlet servicesList = '';\nservices.forEach(s => {\n  servicesList += `  💅 ID: ${s.id} | ${s.name} | ${s.category} | ${s.price} грн | ${s.duration_minutes} хв\\n`;\n});\n\n// --- Build masters list ---\nlet mastersList = '';\nmasters.forEach(m => {\n  const svcIds = masterServiceMap[m.id] || [];\n  const svcNames = svcIds.map(sid => {\n    const svc = services.find(s => s.id === sid);\n    return svc ? svc.name : '';\n  }).filter(Boolean).join(', ');\n  const dates = [...(availableDates[m.id] || [])].slice(0, 10).join(', ');\n  mastersList += `  - ID: ${m.id} | ${m.name} | Послуги: ${svcNames} | Вільні дати: ${dates || 'немає'}\\n`;\n});\n\n// --- Build bookings list ---\nlet bookingsList = '';\nif (bookings.length > 0) {\n  bookings.forEach(b => {\n    const svcName = b.service_id?.name || 'Послуга';\n    const masterName = b.master_id?.name || 'Майстер';\n    const time = (b.start_time || '').substring(0, 5);\n    bookingsList += `  - ID: ${b.id} | ${svcName} у ${masterName}, ${b.date} о ${time}\\n`;\n  });\n} else {\n  bookingsList = '  Немає активних записів.\\n';\n}\n\nconst systemPrompt = `Ти — AI-адміністратор nail-студії \"Nail Studio\" (@nail.studio.kyiv_ob) 💅. Ти спілкуєшся з клієнтами через Instagram Direct.\n\n# ПРО СТУДІЮ\n- Назва: Nail Studio\n- Instagram: @nail.studio.kyiv_ob\n- Локація: Київська область\n- Спеціалізація: манікюр, педикюр, нарощування нігтів, дизайн\n- Графік: Пн-Сб 9:00-18:00, Нд — вихідний\n\n# ПРАВИЛА\n1. Відповідай ТІЛЬКИ українською мовою.\n2. Будь привітним, ввічливим та професійним.\n3. Використовуй емоджі: 💅 нігті, 💰 ціни, 📅 дати, ⏰ час, ✅ підтвердження, ❌ скасування, 🌸 студія, 👋 привітання, 💕 задоволення\n4. Не вигадуй інформацію. Користуйся тільки даними нижче та інструментами.\n5. Відповідай коротко — це Instagram чат.\n6. Не використовуй markdown-форматування — Instagram їх не підтримує.\n7. Максимальна довжина відповіді — 900 символів.\n\n# ПОСЛУГИ\n${servicesList}\n# МАЙСТРИ\n${mastersList}\n# АКТИВНІ ЗАПИСИ КЛІЄНТА\n${bookingsList}\n# ДАНІ КЛІЄНТА\n- Client Instagram ID: ${senderId}\n- Імʼя: ${client.name || 'невідомо'}\n- Instagram: @${client.instagram_username || 'невідомо'}\n\n# СЬОГОДНІ\n${today} (часовий пояс Europe/Kyiv)\n\n# ЯК ЗАПИСАТИ КЛІЄНТА\n1. Зʼясуй яка послуга потрібна.\n2. Допоможи обрати майстра.\n3. Використай find_available_times щоб перевірити вільний час.\n4. Запропонуй вільні години.\n5. Коли клієнт підтвердив — використай create_booking.\n6. Після бронювання повідом клієнта (запис також автоматично зʼявиться в Google Calendar студії).\n\n# СКАСУВАННЯ\nЯкщо клієнт хоче скасувати — використай cancel_booking з ID запису.\n\n# КНОПКИ\nВ кінці КОЖНОГО повідомлення додавай:\n[BUTTONS: Кнопка 1 | Кнопка 2 | Кнопка 3]\nМаксимум 13 кнопок, кожна до 20 символів.\n\nПриклади:\n- Привітання: [BUTTONS: 💅 Манікюр | 🦶 Педикюр | 💎 Нарощування | 🎨 Дизайн | 💰 Прайс]\n- Вибір послуги: [BUTTONS: Класичний | Апаратний | +Гель-лак | ⬅️ Назад]\n- Підтвердження: [BUTTONS: ✅ Підтверджую | ❌ Скасувати]\n- Після запису: [BUTTONS: 📋 Мої записи | 💅 Ще запис | 💰 Прайс]`;\n\nreturn [{\n  json: {\n    userMessage: messageText,\n    systemPrompt: systemPrompt,\n    senderId: senderId,\n    clientId: client.id,\n    clientInstagramId: senderId,\n    accessToken: ACCESS_TOKEN\n  }\n}];"
+        "jsCode": "// Nail Studio Kyiv OB — Prepare Context (v3 — improved scripts)\nconst SUPABASE_URL = 'https://saajgmcaohjqtxufffid.supabase.co';\nconst SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0';\nconst ACCESS_TOKEN = 'IGAAVQ2FGSYClBZAFp4UE9HTnE1bU9VMzdQSTM1YndLdG43b0lNUGxFbElOSWpHYWMycThsMjdneXFQcW1JM0Fnako0cTJiZA1Y2dkdRcEVmZAUlkazlUZA09wSGlsYTN1ZAk52Y25CNXpWN0NuS0tXYjJWLU9PRVJPSjM3SmhudlMtWQZDZD';\n\nconst entry = $input.first().json.body.entry[0];\nconst messaging = entry.messaging[0];\nconst senderId = messaging.sender.id;\nconst messageText = (messaging.message?.text || '').trim();\n\n// --- ECHO FILTER ---\nconst BOT_IG_ID = '17841440137829793';\nif (senderId === BOT_IG_ID) return [];\n\nasync function sbGet(table, q = '') {\n  return await helpers.httpRequest({\n    method: 'GET',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${q}`,\n    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }\n  });\n}\nasync function sbPost(table, data) {\n  return await helpers.httpRequest({\n    method: 'POST',\n    url: `${SUPABASE_URL}/rest/v1/${table}`,\n    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },\n    body: data\n  });\n}\nasync function sbPatch(table, q, data) {\n  return await helpers.httpRequest({\n    method: 'PATCH',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${q}`,\n    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },\n    body: data\n  });\n}\n\nasync function getProfile(uid) {\n  try {\n    return await helpers.httpRequest({\n      method: 'GET',\n      url: `https://graph.instagram.com/v21.0/${uid}?fields=name,username&access_token=${ACCESS_TOKEN}`\n    });\n  } catch(e) { return {}; }\n}\n\n// --- Get or create client ---\nlet clients = await sbGet('clients', `instagram_id=eq.${senderId}`);\nlet client;\nlet isNewClient = false;\nif (clients.length === 0) {\n  isNewClient = true;\n  const p = await getProfile(senderId);\n  const c = await sbPost('clients', {\n    instagram_id: senderId,\n    instagram_username: p.username || null,\n    name: p.name || null\n  });\n  client = Array.isArray(c) ? c[0] : c;\n} else {\n  client = clients[0];\n  if (!client.instagram_username || !client.name) {\n    const p = await getProfile(senderId);\n    const upd = {};\n    if (p.username && !client.instagram_username) upd.instagram_username = p.username;\n    if (p.name && !client.name) upd.name = p.name;\n    if (Object.keys(upd).length) await sbPatch('clients', `id=eq.${client.id}`, upd);\n    if (p.name && !client.name) client.name = p.name;\n  }\n}\n\n// --- Fetch data ---\nconst services = await sbGet('services', 'is_active=eq.true&order=category.asc,price.asc');\nconst masters = await sbGet('masters', 'is_active=eq.true');\nconst msLinks = await sbGet('master_services', 'select=master_id,service_id');\nconst today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());\nconst dayOfWeek = ['неділя','понеділок','вівторок','середа','четвер','пʼятниця','субота'][new Date().getDay()];\n\n// Bookings\nconst bookings = await sbGet('bookings',\n  `client_id=eq.${client.id}&status=eq.confirmed&date=gte.${today}&select=id,date,start_time,end_time,service_id(name,price),master_id(name)&order=date.asc`);\n\n// Build maps\nconst msMap = {};\nfor (const ms of msLinks) {\n  if (!msMap[ms.master_id]) msMap[ms.master_id] = [];\n  msMap[ms.master_id].push(ms.service_id);\n}\n\n// --- Build service catalog by category ---\nconst categories = {};\nservices.forEach(s => {\n  if (!categories[s.category]) categories[s.category] = [];\n  categories[s.category].push(s);\n});\n\nconst catEmoji = { 'Манікюр': '💅', 'Нарощування': '✨', 'Педикюр': '🦶', 'Дизайн': '🎨' };\n\nlet svcCatalog = '';\nfor (const [cat, svcs] of Object.entries(categories)) {\n  const emoji = catEmoji[cat] || '💎';\n  svcCatalog += `\\n${emoji} ${cat.toUpperCase()}\\n`;\n  svcs.forEach(s => {\n    svcCatalog += `  ID:${s.id} | ${s.name} — ${s.price} грн (${s.duration_minutes} хв)\\n`;\n  });\n}\n\nlet masterInfo = '';\nmasters.forEach(m => {\n  const svcNames = (msMap[m.id] || []).map(sid => {\n    const s = services.find(x => x.id === sid);\n    return s ? s.name : '';\n  }).filter(Boolean).join(', ');\n  const daysOff = m.days_off.map(d => ['нд','пн','вт','ср','чт','пт','сб'][d]).join(', ');\n  masterInfo += `  ID:${m.id} | ${m.name} | Графік: ${m.work_start}-${m.work_end}, вих: ${daysOff} | Робить: ${svcNames}\\n`;\n});\n\nlet bookList = '';\nif (bookings.length > 0) {\n  bookings.forEach(b => {\n    bookList += `  ${b.service_id?.name} у ${b.master_id?.name}, ${b.date} о ${(b.start_time||'').slice(0,5)}\\n`;\n  });\n} else { bookList = '  Поки немає запланованих візитів\\n'; }\n\nconst clientName = client.name || '';\nconst clientGreeting = clientName ? clientName.split(' ')[0] : '';\n\nconst prompt = `Ти — Nail Studio Bot 💅, віртуальний адміністратор nail-студії в Київській області (Instagram: @nail.studio.kyiv_ob).\nТи спілкуєшся з клієнтами в Instagram Direct — це живий, теплий чат, не формальний лист.\n\n═══════════════════════════════════\nСТИЛЬ СПІЛКУВАННЯ\n═══════════════════════════════════\n\n1. ТОНАЛЬНІСТЬ: тепла, дружня, як найкраща подруга-майстер. Не офіціозна.\n2. МОВА: тільки українська. Природна розмовна мова, не канцелярит.\n3. ДОВЖИНА: коротко! 2-4 речення на повідомлення. Це Instagram, не email. Макс 800 символів.\n4. ЕМОДЖІ: використовуй органічно, не перевантажуй. 2-4 емоджі на повідомлення максимум.\n   Головні: 💅 ✨ 🦶 🎨 📅 ⏰ ✅ 💕 👋 🔥\n5. ФОРМАТ: БЕЗ markdown (без **, ##, -, *). Простий текст. Для списків використовуй емоджі або нумерацію.\n6. ЗАБОРОНЕНО: вигадувати інформацію, називати ціни/послуги яких немає в даних нижче.\n7. НЕ ПРОФІЛЬНІ ПИТАННЯ: якщо питають не про нігті/запис — м'яко поверни: \"Я спеціалізуюсь на записі до наших майстрів 💅 Чим можу допомогти?\"\n\n═══════════════════════════════════\nСЦЕНАРІЇ СПІЛКУВАННЯ\n═══════════════════════════════════\n\nПРИВІТАННЯ (перше повідомлення):\n${isNewClient ?\n  `Це НОВИЙ клієнт! Привітай тепло:\n  \"Привіт${clientGreeting ? ', ' + clientGreeting : ''} 👋 Раді бачити тебе! Я — бот-помічник Nail Studio 💅 Допоможу обрати послугу та записатись до майстра. Що тебе цікавить?\"\n  Потім додай [BUTTONS: Манікюр 💅|Педикюр 🦶|Нарощування ✨|Прайс 💰]` :\n  `Це ПОВТОРНИЙ клієнт${clientGreeting ? ' ' + clientGreeting : ''}. Привітай тепліше:\n  \"Привіт${clientGreeting ? ', ' + clientGreeting : ''} 👋💕 Рада знову тебе бачити! Записуємось чи є питання?\"\n  Потім додай [BUTTONS: Записатись 📅|Мої записи 📋|Прайс 💰]`}\n\nКОЛИ ПИТАЮТЬ ПРАЙС:\nПоказуй послуги КРАСИВО, по категоріях. Приклад формату:\n\n💅 МАНІКЮР\n  Класичний — 400 грн\n  Апаратний — 450 грн\n  З гель-лаком — 600 грн\n\nПісля прайсу запитай: \"На яку послугу хочеш записатись? 😊\"\nДодай [BUTTONS: Манікюр 💅|Педикюр 🦶|Нарощування ✨]\n\nКОЛИ ОБРАЛИ ПОСЛУГУ:\n1. Підтверди вибір коротко: \"Чудовий вибір! ✨\"\n2. Запропонуй майстрів, які роблять цю послугу. Коротко — імʼя та графік.\n3. Додай кнопки з іменами майстрів: [BUTTONS: Іванна|Вікторія|Аліна]\n\nКОЛИ ОБРАЛИ МАЙСТРА:\n1. Запитай бажану дату: \"На який день хочеш записатись? 📅\"\n2. Можеш підказати найближчі робочі дні майстра.\n3. Додай [BUTTONS: Завтра|Післязавтра|Інша дата]\n\nКОЛИ ОБРАЛИ ДАТУ:\n1. ОБОВЯЗКОВО виклич check_calendar_availability щоб перевірити зайнятість.\n2. Проаналізуй відповідь: порівняй зайняті проміжки з робочими годинами майстра.\n3. Визнач ВІЛЬНІ слоти потрібної тривалості.\n4. Запропонуй 3-5 зручних варіантів часу: \"Ось вільний час на [дату]: ⏰ 9:00, 10:30, 14:00, 16:00\"\n5. Додай кнопки з часом: [BUTTONS: 9:00|10:30|14:00|16:00]\n\nПІДТВЕРДЖЕННЯ ЗАПИСУ:\nПеред бронюванням ЗАВЖДИ підсумуй і запитай:\n\n\"Підтверджуємо? ✅\n\n📋 Твій запис:\n💅 Манікюр + гель-лак\n👩‍🎨 Майстер Іванна\n📅 15 квітня, 10:00\n💰 600 грн\n\nВсе вірно?\"\nДодай [BUTTONS: Підтверджую ✅|Змінити]\n\nПІСЛЯ ПІДТВЕРДЖЕННЯ:\n1. Виклич create_calendar_event\n2. Потім ОБОВЯЗКОВО виклич save_booking з google_event_id\n3. Надішли фінальне повідомлення:\n\n\"Готово, записала тебе! ✅💕\n\n📋 Деталі:\n💅 Манікюр + гель-лак\n👩‍🎨 Майстер Іванна\n📅 15 квітня о 10:00\n💰 600 грн\n\nЧекаємо на тебе! Якщо потрібно перенести — просто напиши 😊\"\n\nМОЇ ЗАПИСИ:\nЯкщо клієнт питає свої записи — покажи зі списку нижче. Якщо немає — \"Поки немає запланованих візитів. Записатись? 💅\"\n\nСКАСУВАННЯ/ПЕРЕНЕСЕННЯ:\n\"На жаль, автоматичне скасування поки не доступне 😔 Напиши нам в Direct свій запит і ми все вирішимо! 💕\"\n\nЯКЩО НЕМАЄ ВІЛЬНОГО ЧАСУ:\n\"На жаль, на цю дату вільного часу немає 😔 Може інший день? Або можу подивитись іншого майстра!\"\nЗапропонуй альтернативи.\n\n═══════════════════════════════════\nДАНІ\n═══════════════════════════════════\n\nКАТАЛОГ ПОСЛУГ:\n${svcCatalog}\nМАЙСТРИ:\n${masterInfo}\nАКТИВНІ ЗАПИСИ КЛІЄНТА:\n${bookList}\nКЛІЄНТ:\n  Instagram Sender ID: ${senderId}\n  Імʼя: ${clientName || 'невідомо'}\n  Instagram: @${client.instagram_username || 'невідомо'}\n  Статус: ${isNewClient ? 'НОВИЙ' : 'ПОВТОРНИЙ'} клієнт\n\nСЬОГОДНІ: ${today}, ${dayOfWeek} (Europe/Kyiv)\n\n═══════════════════════════════════\nІНСТРУМЕНТИ (TOOLS)\n═══════════════════════════════════\n\nПРОЦЕС ЗАПИСУ — виконуй ПОСЛІДОВНО:\n1. Зʼясуй: послуга → майстер → дата\n2. check_calendar_availability — перевір зайнятість Google Calendar. Передай дату. Отримаєш busy-проміжки. Порівняй з графіком майстра та визнач ВІЛЬНІ слоти.\n3. Покажи вільні слоти клієнту.\n4. Після підтвердження → create_calendar_event (calendar_id, summary, start/end datetime, description)\n5. Відразу після → save_booking (master_id, service_id, date, start_time, end_time, google_event_id)\n\nПРАВИЛО КНОПОК:\nДодавай [BUTTONS: текст1|текст2|текст3] в кінець КОЖНОГО повідомлення де є вибір.\nКнопки — до 13 штук, кожна до 20 символів.\nЦе створює зручні швидкі відповіді в Instagram.\n\nКРИТИЧНІ ПРАВИЛА:\n  ЗАВЖДИ перевіряй календар перед бронюванням.\n  НІКОЛИ не бронюй без явного підтвердження клієнта.\n  Враховуй робочі години та вихідні кожного майстра.\n  Після create_calendar_event ОБОВЯЗКОВО виклич save_booking.\n  Не пропонуй час поза робочими годинами майстра.`;\n\nreturn [{ json: { userMessage: messageText, systemPrompt: prompt, senderId, clientId: client.id, accessToken: ACCESS_TOKEN } }];"
       },
       "id": "prepare-context",
       "name": "Prepare Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [920, 300]
+      "position": [
+        920,
+        300
+      ]
     },
     {
       "parameters": {
@@ -102,11 +126,14 @@
           "maxIterations": 5
         }
       },
-      "id": "ai-operator",
-      "name": "AI Operator",
+      "id": "ai-agent",
+      "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [1180, 300]
+      "position": [
+        1180,
+        300
+      ]
     },
     {
       "parameters": {
@@ -119,15 +146,18 @@
           "temperature": 0.4
         }
       },
-      "id": "openai-chat-model",
+      "id": "openai-model",
       "name": "OpenAI Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
-      "position": [1060, 520],
+      "position": [
+        1060,
+        520
+      ],
       "credentials": {
         "openAiApi": {
-          "id": "__OPENAI_CREDENTIAL_ID__",
-          "name": "__OPENAI_CREDENTIAL_NAME__"
+          "id": "b1hLC5E1Ad7p27A9",
+          "name": "OpenAi - course generator"
         }
       }
     },
@@ -137,126 +167,121 @@
         "sessionKey": "={{ $('Prepare Context').item.json.senderId }}",
         "contextWindowLength": 20
       },
-      "id": "memory-buffer",
+      "id": "memory",
       "name": "Window Buffer Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
-      "position": [1180, 520]
+      "position": [
+        1180,
+        520
+      ]
     },
     {
       "parameters": {
-        "toolDescription": "Find available appointment time slots. Can filter by service, master, and/or date. Returns list of available slot_id, master_name, start_time, end_time, price. Always call this before creating a booking.",
+        "toolDescription": "Check Google Calendar for busy periods on a date. Returns busy time ranges. Use these to find free slots within master work hours. Input: date as YYYY-MM-DD string.",
         "method": "POST",
-        "url": "__SUPABASE_URL__/rest/v1/rpc/find_available_times",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "__SUPABASE_SERVICE_ROLE_KEY__"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer __SUPABASE_SERVICE_ROLE_KEY__"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
+        "url": "https://www.googleapis.com/calendar/v3/freeBusy",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "options": {},
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"p_service_id\": \"{{ $fromAI('service_id', 'UUID of the service, or null') }}\",\n  \"p_master_id\": \"{{ $fromAI('master_id', 'UUID of the master, or null') }}\",\n  \"p_date\": \"{{ $fromAI('date', 'Date in YYYY-MM-DD format') }}\"\n}",
-        "options": {}
+        "jsonBody": "={\n  \"timeMin\": \"{{ $fromAI('date', '') }}T00:00:00+03:00\",\n  \"timeMax\": \"{{ $fromAI('date', '') }}T23:59:59+03:00\",\n  \"items\": [{\"id\": \"cumasergej08@gmail.com\"}]\n}"
       },
-      "id": "tool-find-times",
-      "name": "Find Available Times",
+      "id": "tool-check-cal",
+      "name": "Check Calendar Availability",
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.3,
-      "position": [1300, 520]
-    },
-    {
-      "parameters": {
-        "toolDescription": "Create a confirmed booking for the client. Call this ONLY after client explicitly confirms. Also creates a Google Calendar event automatically. Parameters: client_instagram_id (from context), master_id (UUID), service_id (UUID), slot_id (UUID from find_available_times).",
-        "method": "POST",
-        "url": "__SUPABASE_URL__/rest/v1/rpc/create_booking",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "__SUPABASE_SERVICE_ROLE_KEY__"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer __SUPABASE_SERVICE_ROLE_KEY__"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"p_client_instagram_id\": \"{{ $fromAI('client_instagram_id', 'Instagram ID of the client from system context') }}\",\n  \"p_master_id\": \"{{ $fromAI('master_id', 'UUID of the master') }}\",\n  \"p_service_id\": \"{{ $fromAI('service_id', 'UUID of the service') }}\",\n  \"p_slot_id\": \"{{ $fromAI('slot_id', 'UUID of the time slot from find_available_times result') }}\"\n}",
-        "options": {
-          "response": {
-            "response": {
-              "responseFormat": "text"
-            }
-          }
+      "position": [
+        1300,
+        520
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "qoAsLF4jTZsifFsi",
+          "name": "n8n_google-calendar_booking-bot"
         }
-      },
-      "id": "tool-create-booking",
-      "name": "Create Booking",
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.3,
-      "position": [1420, 520]
+      }
     },
     {
       "parameters": {
-        "toolDescription": "Cancel an existing booking. Frees up the time slots and returns Google Calendar event ID for deletion. Use when client wants to cancel their appointment.",
+        "toolDescription": "Create Google Calendar event for confirmed booking. Inputs: summary (string like Манікюр класичний - Олена), start_datetime (YYYY-MM-DDTHH:MM:00), end_datetime (YYYY-MM-DDTHH:MM:00), description (booking details string).",
         "method": "POST",
-        "url": "__SUPABASE_URL__/rest/v1/rpc/cancel_booking",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/cumasergej08%40gmail.com/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"summary\": \"{{ $fromAI('summary', '') }}\",\n  \"start\": {\n    \"dateTime\": \"{{ $fromAI('start_datetime', '') }}\",\n    \"timeZone\": \"Europe/Kyiv\"\n  },\n  \"end\": {\n    \"dateTime\": \"{{ $fromAI('end_datetime', '') }}\",\n    \"timeZone\": \"Europe/Kyiv\"\n  },\n  \"description\": \"{{ $fromAI('description', '') }}\"\n}",
+        "options": {}
+      },
+      "id": "tool-create-event",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        1420,
+        520
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "qoAsLF4jTZsifFsi",
+          "name": "n8n_google-calendar_booking-bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Save booking to database after calendar event created. Inputs: master_id (UUID), service_id (UUID), date (YYYY-MM-DD), start_time (HH:MM), end_time (HH:MM), google_event_id (id field from Create Calendar Event response). client_id is auto-filled.",
+        "method": "POST",
+        "url": "https://saajgmcaohjqtxufffid.supabase.co/rest/v1/bookings",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "__SUPABASE_SERVICE_ROLE_KEY__"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0"
             },
             {
               "name": "Authorization",
-              "value": "Bearer __SUPABASE_SERVICE_ROLE_KEY__"
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0"
             },
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"p_booking_id\": \"{{ $fromAI('booking_id', 'UUID of the booking to cancel') }}\"\n}",
+        "jsonBody": "={\n  \"client_id\": \"{{ $('Prepare Context').item.json.clientId }}\",\n  \"master_id\": \"{{ $fromAI('master_id', '') }}\",\n  \"service_id\": \"{{ $fromAI('service_id', '') }}\",\n  \"date\": \"{{ $fromAI('date', '') }}\",\n  \"start_time\": \"{{ $fromAI('start_time', '') }}\",\n  \"end_time\": \"{{ $fromAI('end_time', '') }}\",\n  \"google_event_id\": \"{{ $fromAI('google_event_id', '') }}\",\n  \"status\": \"confirmed\"\n}",
         "options": {}
       },
-      "id": "tool-cancel-booking",
-      "name": "Cancel Booking",
+      "id": "tool-save-booking",
+      "name": "Save Booking",
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.3,
-      "position": [1540, 520]
+      "position": [
+        1540,
+        520
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Format AI response for Instagram DM\n// Parses [BUTTONS: ...] tags into Instagram quick_replies\n// ============================================================\n\nconst aiOutput = $json.output || 'Вибачте, сталася помилка. Спробуйте ще раз.';\nconst prepareData = $('Prepare Context').first().json;\nconst senderId = prepareData.senderId;\nconst accessToken = prepareData.accessToken;\n\n// --- Parse [BUTTONS: btn1 | btn2 | btn3] from AI output ---\nlet replyText = aiOutput;\nlet quickReplies = [];\n\nconst buttonMatch = replyText.match(/\\[BUTTONS:\\s*(.+?)\\]/);\nif (buttonMatch) {\n  replyText = replyText.replace(/\\[BUTTONS:\\s*.+?\\]/, '').trim();\n  const buttons = buttonMatch[1].split('|').map(b => b.trim()).filter(b => b.length > 0);\n  quickReplies = buttons.slice(0, 13).map(label => {\n    const trimmedLabel = label.substring(0, 20);\n    return {\n      content_type: 'text',\n      title: trimmedLabel,\n      payload: trimmedLabel\n    };\n  });\n}\n\nif (replyText.length > 950) {\n  replyText = replyText.substring(0, 947) + '...';\n}\n\nconst messagePayload = { text: replyText };\nif (quickReplies.length > 0) {\n  messagePayload.quick_replies = quickReplies;\n}\n\nreturn [{\n  json: {\n    senderId: senderId,\n    messagePayload: messagePayload,\n    accessToken: accessToken\n  }\n}];"
+        "jsCode": "const aiOutput = $json.output || 'Вибачте, сталася помилка 🙏';\nconst pd = $('Prepare Context').first().json;\n\nlet text = aiOutput;\nlet qr = [];\n\nconst bm = text.match(/\\[BUTTONS:\\s*(.+?)\\]/);\nif (bm) {\n  text = text.replace(/\\[BUTTONS:\\s*.+?\\]/, '').trim();\n  qr = bm[1].split('|').map(b => b.trim()).filter(b => b).slice(0, 13)\n    .map(l => ({ content_type: 'text', title: l.substring(0, 20), payload: l.substring(0, 20) }));\n}\nif (text.length > 950) text = text.substring(0, 947) + '...';\n\nconst msg = { text };\nif (qr.length) msg.quick_replies = qr;\n\nreturn [{ json: { senderId: pd.senderId, messagePayload: msg, accessToken: pd.accessToken } }];"
       },
       "id": "format-reply",
       "name": "Format Reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1440, 300]
+      "position": [
+        1440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -273,7 +298,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"recipient\": {\n    \"id\": \"{{ $json.senderId }}\"\n  },\n  \"message\": {{ JSON.stringify($json.messagePayload) }}\n}",
+        "jsonBody": "={\n  \"recipient\": { \"id\": \"{{ $json.senderId }}\" },\n  \"message\": {{ JSON.stringify($json.messagePayload) }}\n}",
         "options": {
           "timeout": 10000
         }
@@ -282,50 +307,14 @@
       "name": "Send Reply to Instagram",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1680, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// ============================================================\n// Create Google Calendar Event after successful booking\n// Runs after AI Operator when a booking was created\n// ============================================================\n\n// Check if AI output contains booking confirmation indicators\nconst aiOutput = $json.output || '';\nconst prepareData = $('Prepare Context').first().json;\n\n// We pass through all data; the Google Calendar node is triggered\n// separately via a secondary flow after booking creation in the AI tools.\n// This node extracts booking details from the AI conversation to create\n// a calendar event.\n\n// For now, we detect bookings by checking the create_booking tool call results\n// The AI Operator's tool execution results contain the booking data\n\nreturn [{\n  json: {\n    ...prepareData,\n    aiOutput: aiOutput\n  }\n}];"
-      },
-      "id": "check-booking-created",
-      "name": "Check Booking Created",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1440, 100],
-      "notes": "Future: parse booking from AI output and trigger Google Calendar event creation"
-    },
-    {
-      "parameters": {
-        "calendar": {
-          "__rl": true,
-          "value": "primary",
-          "mode": "list"
-        },
-        "start": "={{ $json.eventStart }}",
-        "end": "={{ $json.eventEnd }}",
-        "additionalFields": {
-          "summary": "={{ $json.eventSummary }}",
-          "description": "={{ $json.eventDescription }}",
-          "location": "Nail Studio, Київська область"
-        }
-      },
-      "id": "google-calendar-create",
-      "name": "Google Calendar — Create Event",
-      "type": "n8n-nodes-base.googleCalendar",
-      "typeVersion": 1.3,
-      "position": [1680, 100],
-      "credentials": {
-        "googleCalendarOAuth2Api": {
-          "id": "__GOOGLE_CALENDAR_CREDENTIAL_ID__",
-          "name": "__GOOGLE_CALENDAR_CREDENTIAL_NAME__"
-        }
-      },
-      "notes": "Requires Google Calendar OAuth2 credential for cumasergej08@gmail.com"
+      "position": [
+        1680,
+        300
+      ]
     }
   ],
   "connections": {
-    "Webhook POST (Messages)": {
+    "Webhook POST": {
       "main": [
         [
           {
@@ -373,14 +362,14 @@
       "main": [
         [
           {
-            "node": "AI Operator",
+            "node": "AI Agent",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "AI Operator": {
+    "AI Agent": {
       "main": [
         [
           {
@@ -406,7 +395,7 @@
       "ai_languageModel": [
         [
           {
-            "node": "AI Operator",
+            "node": "AI Agent",
             "type": "ai_languageModel",
             "index": 0
           }
@@ -417,40 +406,40 @@
       "ai_memory": [
         [
           {
-            "node": "AI Operator",
+            "node": "AI Agent",
             "type": "ai_memory",
             "index": 0
           }
         ]
       ]
     },
-    "Find Available Times": {
+    "Check Calendar Availability": {
       "ai_tool": [
         [
           {
-            "node": "AI Operator",
+            "node": "AI Agent",
             "type": "ai_tool",
             "index": 0
           }
         ]
       ]
     },
-    "Create Booking": {
+    "Create Calendar Event": {
       "ai_tool": [
         [
           {
-            "node": "AI Operator",
+            "node": "AI Agent",
             "type": "ai_tool",
             "index": 0
           }
         ]
       ]
     },
-    "Cancel Booking": {
+    "Save Booking": {
       "ai_tool": [
         [
           {
-            "node": "AI Operator",
+            "node": "AI Agent",
             "type": "ai_tool",
             "index": 0
           }
@@ -459,28 +448,533 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "tags": [
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "b53fabcf-b589-442d-bee0-22ae4509e5c3",
+  "activeVersionId": "b53fabcf-b589-442d-bee0-22ae4509e5c3",
+  "versionCounter": 85,
+  "triggerCount": 2,
+  "shared": [
     {
-      "name": "instagram",
-      "id": "1"
-    },
-    {
-      "name": "nail-studio",
-      "id": "2"
-    },
-    {
-      "name": "booking",
-      "id": "3"
-    },
-    {
-      "name": "ai-agent",
-      "id": "4"
-    },
-    {
-      "name": "google-calendar",
-      "id": "5"
+      "updatedAt": "2026-03-16T15:30:26.859Z",
+      "createdAt": "2026-03-16T15:30:26.859Z",
+      "role": "workflow:owner",
+      "workflowId": "5iXUqYa4eX72YBbP",
+      "projectId": "LmhOD4aQjDc8j54F",
+      "project": {
+        "updatedAt": "2025-08-01T12:06:15.569Z",
+        "createdAt": "2025-07-31T12:25:48.704Z",
+        "id": "LmhOD4aQjDc8j54F",
+        "name": "OLEKSANDR Polischuk <ap@web-promo.com.ua>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "6f7766c1-8e6d-478f-a667-93619ba35dbe",
+        "projectRelations": [
+          {
+            "updatedAt": "2025-07-31T12:25:48.704Z",
+            "createdAt": "2025-07-31T12:25:48.704Z",
+            "userId": "6f7766c1-8e6d-478f-a667-93619ba35dbe",
+            "projectId": "LmhOD4aQjDc8j54F",
+            "user": {
+              "updatedAt": "2026-03-31T23:05:50.619Z",
+              "createdAt": "2025-07-31T12:25:47.251Z",
+              "id": "6f7766c1-8e6d-478f-a667-93619ba35dbe",
+              "email": "ap@web-promo.com.ua",
+              "firstName": "OLEKSANDR",
+              "lastName": "Polischuk",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-08-01T12:06:26.310Z",
+                "personalization_survey_n8n_version": "1.104.1"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "i6feMHLya6oSMXYC",
+                "userActivatedAt": 1759166190434,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1761673568422
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-03-31",
+              "isPending": false
+            }
+          }
+        ]
+      }
     }
-  ]
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-04-01T18:31:49.171Z",
+    "createdAt": "2026-04-01T18:31:49.171Z",
+    "versionId": "b53fabcf-b589-442d-bee0-22ae4509e5c3",
+    "workflowId": "5iXUqYa4eX72YBbP",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "instagram-webhook",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-post",
+        "name": "Webhook POST",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          260,
+          300
+        ],
+        "webhookId": "instagram-webhook"
+      },
+      {
+        "parameters": {
+          "httpMethod": "GET",
+          "path": "instagram-webhook",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-get",
+        "name": "Webhook GET (Verify)",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          260,
+          520
+        ],
+        "webhookId": "instagram-webhook-verify"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ $json.query['hub.challenge'] }}",
+          "options": {}
+        },
+        "id": "verify-response",
+        "name": "Verify Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          500,
+          520
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "has-text",
+                "leftValue": "={{ $json.body.entry[0].messaging[0].message.text }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "exists",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "filter-msg",
+        "name": "Filter: Has Message",
+        "type": "n8n-nodes-base.filter",
+        "typeVersion": 2,
+        "position": [
+          480,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\"status\": \"ok\"}",
+          "options": {}
+        },
+        "id": "respond-ok",
+        "name": "Respond OK",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          700,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Nail Studio Kyiv OB — Prepare Context (v3 — improved scripts)\nconst SUPABASE_URL = 'https://saajgmcaohjqtxufffid.supabase.co';\nconst SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0';\nconst ACCESS_TOKEN = 'IGAAVQ2FGSYClBZAFp4UE9HTnE1bU9VMzdQSTM1YndLdG43b0lNUGxFbElOSWpHYWMycThsMjdneXFQcW1JM0Fnako0cTJiZA1Y2dkdRcEVmZAUlkazlUZA09wSGlsYTN1ZAk52Y25CNXpWN0NuS0tXYjJWLU9PRVJPSjM3SmhudlMtWQZDZD';\n\nconst entry = $input.first().json.body.entry[0];\nconst messaging = entry.messaging[0];\nconst senderId = messaging.sender.id;\nconst messageText = (messaging.message?.text || '').trim();\n\n// --- ECHO FILTER ---\nconst BOT_IG_ID = '17841440137829793';\nif (senderId === BOT_IG_ID) return [];\n\nasync function sbGet(table, q = '') {\n  return await helpers.httpRequest({\n    method: 'GET',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${q}`,\n    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }\n  });\n}\nasync function sbPost(table, data) {\n  return await helpers.httpRequest({\n    method: 'POST',\n    url: `${SUPABASE_URL}/rest/v1/${table}`,\n    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },\n    body: data\n  });\n}\nasync function sbPatch(table, q, data) {\n  return await helpers.httpRequest({\n    method: 'PATCH',\n    url: `${SUPABASE_URL}/rest/v1/${table}?${q}`,\n    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },\n    body: data\n  });\n}\n\nasync function getProfile(uid) {\n  try {\n    return await helpers.httpRequest({\n      method: 'GET',\n      url: `https://graph.instagram.com/v21.0/${uid}?fields=name,username&access_token=${ACCESS_TOKEN}`\n    });\n  } catch(e) { return {}; }\n}\n\n// --- Get or create client ---\nlet clients = await sbGet('clients', `instagram_id=eq.${senderId}`);\nlet client;\nlet isNewClient = false;\nif (clients.length === 0) {\n  isNewClient = true;\n  const p = await getProfile(senderId);\n  const c = await sbPost('clients', {\n    instagram_id: senderId,\n    instagram_username: p.username || null,\n    name: p.name || null\n  });\n  client = Array.isArray(c) ? c[0] : c;\n} else {\n  client = clients[0];\n  if (!client.instagram_username || !client.name) {\n    const p = await getProfile(senderId);\n    const upd = {};\n    if (p.username && !client.instagram_username) upd.instagram_username = p.username;\n    if (p.name && !client.name) upd.name = p.name;\n    if (Object.keys(upd).length) await sbPatch('clients', `id=eq.${client.id}`, upd);\n    if (p.name && !client.name) client.name = p.name;\n  }\n}\n\n// --- Fetch data ---\nconst services = await sbGet('services', 'is_active=eq.true&order=category.asc,price.asc');\nconst masters = await sbGet('masters', 'is_active=eq.true');\nconst msLinks = await sbGet('master_services', 'select=master_id,service_id');\nconst today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());\nconst dayOfWeek = ['неділя','понеділок','вівторок','середа','четвер','пʼятниця','субота'][new Date().getDay()];\n\n// Bookings\nconst bookings = await sbGet('bookings',\n  `client_id=eq.${client.id}&status=eq.confirmed&date=gte.${today}&select=id,date,start_time,end_time,service_id(name,price),master_id(name)&order=date.asc`);\n\n// Build maps\nconst msMap = {};\nfor (const ms of msLinks) {\n  if (!msMap[ms.master_id]) msMap[ms.master_id] = [];\n  msMap[ms.master_id].push(ms.service_id);\n}\n\n// --- Build service catalog by category ---\nconst categories = {};\nservices.forEach(s => {\n  if (!categories[s.category]) categories[s.category] = [];\n  categories[s.category].push(s);\n});\n\nconst catEmoji = { 'Манікюр': '💅', 'Нарощування': '✨', 'Педикюр': '🦶', 'Дизайн': '🎨' };\n\nlet svcCatalog = '';\nfor (const [cat, svcs] of Object.entries(categories)) {\n  const emoji = catEmoji[cat] || '💎';\n  svcCatalog += `\\n${emoji} ${cat.toUpperCase()}\\n`;\n  svcs.forEach(s => {\n    svcCatalog += `  ID:${s.id} | ${s.name} — ${s.price} грн (${s.duration_minutes} хв)\\n`;\n  });\n}\n\nlet masterInfo = '';\nmasters.forEach(m => {\n  const svcNames = (msMap[m.id] || []).map(sid => {\n    const s = services.find(x => x.id === sid);\n    return s ? s.name : '';\n  }).filter(Boolean).join(', ');\n  const daysOff = m.days_off.map(d => ['нд','пн','вт','ср','чт','пт','сб'][d]).join(', ');\n  masterInfo += `  ID:${m.id} | ${m.name} | Графік: ${m.work_start}-${m.work_end}, вих: ${daysOff} | Робить: ${svcNames}\\n`;\n});\n\nlet bookList = '';\nif (bookings.length > 0) {\n  bookings.forEach(b => {\n    bookList += `  ${b.service_id?.name} у ${b.master_id?.name}, ${b.date} о ${(b.start_time||'').slice(0,5)}\\n`;\n  });\n} else { bookList = '  Поки немає запланованих візитів\\n'; }\n\nconst clientName = client.name || '';\nconst clientGreeting = clientName ? clientName.split(' ')[0] : '';\n\nconst prompt = `Ти — Nail Studio Bot 💅, віртуальний адміністратор nail-студії в Київській області (Instagram: @nail.studio.kyiv_ob).\nТи спілкуєшся з клієнтами в Instagram Direct — це живий, теплий чат, не формальний лист.\n\n═══════════════════════════════════\nСТИЛЬ СПІЛКУВАННЯ\n═══════════════════════════════════\n\n1. ТОНАЛЬНІСТЬ: тепла, дружня, як найкраща подруга-майстер. Не офіціозна.\n2. МОВА: тільки українська. Природна розмовна мова, не канцелярит.\n3. ДОВЖИНА: коротко! 2-4 речення на повідомлення. Це Instagram, не email. Макс 800 символів.\n4. ЕМОДЖІ: використовуй органічно, не перевантажуй. 2-4 емоджі на повідомлення максимум.\n   Головні: 💅 ✨ 🦶 🎨 📅 ⏰ ✅ 💕 👋 🔥\n5. ФОРМАТ: БЕЗ markdown (без **, ##, -, *). Простий текст. Для списків використовуй емоджі або нумерацію.\n6. ЗАБОРОНЕНО: вигадувати інформацію, називати ціни/послуги яких немає в даних нижче.\n7. НЕ ПРОФІЛЬНІ ПИТАННЯ: якщо питають не про нігті/запис — м'яко поверни: \"Я спеціалізуюсь на записі до наших майстрів 💅 Чим можу допомогти?\"\n\n═══════════════════════════════════\nСЦЕНАРІЇ СПІЛКУВАННЯ\n═══════════════════════════════════\n\nПРИВІТАННЯ (перше повідомлення):\n${isNewClient ?\n  `Це НОВИЙ клієнт! Привітай тепло:\n  \"Привіт${clientGreeting ? ', ' + clientGreeting : ''} 👋 Раді бачити тебе! Я — бот-помічник Nail Studio 💅 Допоможу обрати послугу та записатись до майстра. Що тебе цікавить?\"\n  Потім додай [BUTTONS: Манікюр 💅|Педикюр 🦶|Нарощування ✨|Прайс 💰]` :\n  `Це ПОВТОРНИЙ клієнт${clientGreeting ? ' ' + clientGreeting : ''}. Привітай тепліше:\n  \"Привіт${clientGreeting ? ', ' + clientGreeting : ''} 👋💕 Рада знову тебе бачити! Записуємось чи є питання?\"\n  Потім додай [BUTTONS: Записатись 📅|Мої записи 📋|Прайс 💰]`}\n\nКОЛИ ПИТАЮТЬ ПРАЙС:\nПоказуй послуги КРАСИВО, по категоріях. Приклад формату:\n\n💅 МАНІКЮР\n  Класичний — 400 грн\n  Апаратний — 450 грн\n  З гель-лаком — 600 грн\n\nПісля прайсу запитай: \"На яку послугу хочеш записатись? 😊\"\nДодай [BUTTONS: Манікюр 💅|Педикюр 🦶|Нарощування ✨]\n\nКОЛИ ОБРАЛИ ПОСЛУГУ:\n1. Підтверди вибір коротко: \"Чудовий вибір! ✨\"\n2. Запропонуй майстрів, які роблять цю послугу. Коротко — імʼя та графік.\n3. Додай кнопки з іменами майстрів: [BUTTONS: Іванна|Вікторія|Аліна]\n\nКОЛИ ОБРАЛИ МАЙСТРА:\n1. Запитай бажану дату: \"На який день хочеш записатись? 📅\"\n2. Можеш підказати найближчі робочі дні майстра.\n3. Додай [BUTTONS: Завтра|Післязавтра|Інша дата]\n\nКОЛИ ОБРАЛИ ДАТУ:\n1. ОБОВЯЗКОВО виклич check_calendar_availability щоб перевірити зайнятість.\n2. Проаналізуй відповідь: порівняй зайняті проміжки з робочими годинами майстра.\n3. Визнач ВІЛЬНІ слоти потрібної тривалості.\n4. Запропонуй 3-5 зручних варіантів часу: \"Ось вільний час на [дату]: ⏰ 9:00, 10:30, 14:00, 16:00\"\n5. Додай кнопки з часом: [BUTTONS: 9:00|10:30|14:00|16:00]\n\nПІДТВЕРДЖЕННЯ ЗАПИСУ:\nПеред бронюванням ЗАВЖДИ підсумуй і запитай:\n\n\"Підтверджуємо? ✅\n\n📋 Твій запис:\n💅 Манікюр + гель-лак\n👩‍🎨 Майстер Іванна\n📅 15 квітня, 10:00\n💰 600 грн\n\nВсе вірно?\"\nДодай [BUTTONS: Підтверджую ✅|Змінити]\n\nПІСЛЯ ПІДТВЕРДЖЕННЯ:\n1. Виклич create_calendar_event\n2. Потім ОБОВЯЗКОВО виклич save_booking з google_event_id\n3. Надішли фінальне повідомлення:\n\n\"Готово, записала тебе! ✅💕\n\n📋 Деталі:\n💅 Манікюр + гель-лак\n👩‍🎨 Майстер Іванна\n📅 15 квітня о 10:00\n💰 600 грн\n\nЧекаємо на тебе! Якщо потрібно перенести — просто напиши 😊\"\n\nМОЇ ЗАПИСИ:\nЯкщо клієнт питає свої записи — покажи зі списку нижче. Якщо немає — \"Поки немає запланованих візитів. Записатись? 💅\"\n\nСКАСУВАННЯ/ПЕРЕНЕСЕННЯ:\n\"На жаль, автоматичне скасування поки не доступне 😔 Напиши нам в Direct свій запит і ми все вирішимо! 💕\"\n\nЯКЩО НЕМАЄ ВІЛЬНОГО ЧАСУ:\n\"На жаль, на цю дату вільного часу немає 😔 Може інший день? Або можу подивитись іншого майстра!\"\nЗапропонуй альтернативи.\n\n═══════════════════════════════════\nДАНІ\n═══════════════════════════════════\n\nКАТАЛОГ ПОСЛУГ:\n${svcCatalog}\nМАЙСТРИ:\n${masterInfo}\nАКТИВНІ ЗАПИСИ КЛІЄНТА:\n${bookList}\nКЛІЄНТ:\n  Instagram Sender ID: ${senderId}\n  Імʼя: ${clientName || 'невідомо'}\n  Instagram: @${client.instagram_username || 'невідомо'}\n  Статус: ${isNewClient ? 'НОВИЙ' : 'ПОВТОРНИЙ'} клієнт\n\nСЬОГОДНІ: ${today}, ${dayOfWeek} (Europe/Kyiv)\n\n═══════════════════════════════════\nІНСТРУМЕНТИ (TOOLS)\n═══════════════════════════════════\n\nПРОЦЕС ЗАПИСУ — виконуй ПОСЛІДОВНО:\n1. Зʼясуй: послуга → майстер → дата\n2. check_calendar_availability — перевір зайнятість Google Calendar. Передай дату. Отримаєш busy-проміжки. Порівняй з графіком майстра та визнач ВІЛЬНІ слоти.\n3. Покажи вільні слоти клієнту.\n4. Після підтвердження → create_calendar_event (calendar_id, summary, start/end datetime, description)\n5. Відразу після → save_booking (master_id, service_id, date, start_time, end_time, google_event_id)\n\nПРАВИЛО КНОПОК:\nДодавай [BUTTONS: текст1|текст2|текст3] в кінець КОЖНОГО повідомлення де є вибір.\nКнопки — до 13 штук, кожна до 20 символів.\nЦе створює зручні швидкі відповіді в Instagram.\n\nКРИТИЧНІ ПРАВИЛА:\n  ЗАВЖДИ перевіряй календар перед бронюванням.\n  НІКОЛИ не бронюй без явного підтвердження клієнта.\n  Враховуй робочі години та вихідні кожного майстра.\n  Після create_calendar_event ОБОВЯЗКОВО виклич save_booking.\n  Не пропонуй час поза робочими годинами майстра.`;\n\nreturn [{ json: { userMessage: messageText, systemPrompt: prompt, senderId, clientId: client.id, accessToken: ACCESS_TOKEN } }];"
+        },
+        "id": "prepare-context",
+        "name": "Prepare Context",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          920,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.userMessage }}",
+          "options": {
+            "systemMessage": "={{ $json.systemPrompt }}",
+            "maxIterations": 5
+          }
+        },
+        "id": "ai-agent",
+        "name": "AI Agent",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 1.7,
+        "position": [
+          1180,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "gpt-4.1-mini"
+          },
+          "options": {
+            "temperature": 0.4
+          }
+        },
+        "id": "openai-model",
+        "name": "OpenAI Chat Model",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          1060,
+          520
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "b1hLC5E1Ad7p27A9",
+            "name": "OpenAi - course generator"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "sessionIdType": "customKey",
+          "sessionKey": "={{ $('Prepare Context').item.json.senderId }}",
+          "contextWindowLength": 20
+        },
+        "id": "memory",
+        "name": "Window Buffer Memory",
+        "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+        "typeVersion": 1.3,
+        "position": [
+          1180,
+          520
+        ]
+      },
+      {
+        "parameters": {
+          "toolDescription": "Check Google Calendar for busy periods on a date. Returns busy time ranges. Use these to find free slots within master work hours. Input: date as YYYY-MM-DD string.",
+          "method": "POST",
+          "url": "https://www.googleapis.com/calendar/v3/freeBusy",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleCalendarOAuth2Api",
+          "options": {},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"timeMin\": \"{{ $fromAI('date', '') }}T00:00:00+03:00\",\n  \"timeMax\": \"{{ $fromAI('date', '') }}T23:59:59+03:00\",\n  \"items\": [{\"id\": \"cumasergej08@gmail.com\"}]\n}"
+        },
+        "id": "tool-check-cal",
+        "name": "Check Calendar Availability",
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.3,
+        "position": [
+          1300,
+          520
+        ],
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "qoAsLF4jTZsifFsi",
+            "name": "n8n_google-calendar_booking-bot"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "toolDescription": "Create Google Calendar event for confirmed booking. Inputs: summary (string like Манікюр класичний - Олена), start_datetime (YYYY-MM-DDTHH:MM:00), end_datetime (YYYY-MM-DDTHH:MM:00), description (booking details string).",
+          "method": "POST",
+          "url": "https://www.googleapis.com/calendar/v3/calendars/cumasergej08%40gmail.com/events",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleCalendarOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"summary\": \"{{ $fromAI('summary', '') }}\",\n  \"start\": {\n    \"dateTime\": \"{{ $fromAI('start_datetime', '') }}\",\n    \"timeZone\": \"Europe/Kyiv\"\n  },\n  \"end\": {\n    \"dateTime\": \"{{ $fromAI('end_datetime', '') }}\",\n    \"timeZone\": \"Europe/Kyiv\"\n  },\n  \"description\": \"{{ $fromAI('description', '') }}\"\n}",
+          "options": {}
+        },
+        "id": "tool-create-event",
+        "name": "Create Calendar Event",
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.3,
+        "position": [
+          1420,
+          520
+        ],
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "qoAsLF4jTZsifFsi",
+            "name": "n8n_google-calendar_booking-bot"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "toolDescription": "Save booking to database after calendar event created. Inputs: master_id (UUID), service_id (UUID), date (YYYY-MM-DD), start_time (HH:MM), end_time (HH:MM), google_event_id (id field from Create Calendar Event response). client_id is auto-filled.",
+          "method": "POST",
+          "url": "https://saajgmcaohjqtxufffid.supabase.co/rest/v1/bookings",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"client_id\": \"{{ $('Prepare Context').item.json.clientId }}\",\n  \"master_id\": \"{{ $fromAI('master_id', '') }}\",\n  \"service_id\": \"{{ $fromAI('service_id', '') }}\",\n  \"date\": \"{{ $fromAI('date', '') }}\",\n  \"start_time\": \"{{ $fromAI('start_time', '') }}\",\n  \"end_time\": \"{{ $fromAI('end_time', '') }}\",\n  \"google_event_id\": \"{{ $fromAI('google_event_id', '') }}\",\n  \"status\": \"confirmed\"\n}",
+          "options": {}
+        },
+        "id": "tool-save-booking",
+        "name": "Save Booking",
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.3,
+        "position": [
+          1540,
+          520
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const aiOutput = $json.output || 'Вибачте, сталася помилка 🙏';\nconst pd = $('Prepare Context').first().json;\n\nlet text = aiOutput;\nlet qr = [];\n\nconst bm = text.match(/\\[BUTTONS:\\s*(.+?)\\]/);\nif (bm) {\n  text = text.replace(/\\[BUTTONS:\\s*.+?\\]/, '').trim();\n  qr = bm[1].split('|').map(b => b.trim()).filter(b => b).slice(0, 13)\n    .map(l => ({ content_type: 'text', title: l.substring(0, 20), payload: l.substring(0, 20) }));\n}\nif (text.length > 950) text = text.substring(0, 947) + '...';\n\nconst msg = { text };\nif (qr.length) msg.quick_replies = qr;\n\nreturn [{ json: { senderId: pd.senderId, messagePayload: msg, accessToken: pd.accessToken } }];"
+        },
+        "id": "format-reply",
+        "name": "Format Reply",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1440,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://graph.instagram.com/v21.0/me/messages",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "access_token",
+                "value": "={{ $json.accessToken }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"recipient\": { \"id\": \"{{ $json.senderId }}\" },\n  \"message\": {{ JSON.stringify($json.messagePayload) }}\n}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "send-reply",
+        "name": "Send Reply to Instagram",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1680,
+          300
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook POST": {
+        "main": [
+          [
+            {
+              "node": "Filter: Has Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook GET (Verify)": {
+        "main": [
+          [
+            {
+              "node": "Verify Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter: Has Message": {
+        "main": [
+          [
+            {
+              "node": "Respond OK",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Respond OK": {
+        "main": [
+          [
+            {
+              "node": "Prepare Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Context": {
+        "main": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent": {
+        "main": [
+          [
+            {
+              "node": "Format Reply",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Format Reply": {
+        "main": [
+          [
+            {
+              "node": "Send Reply to Instagram",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Window Buffer Memory": {
+        "ai_memory": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_memory",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Calendar Availability": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Calendar Event": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save Booking": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "OLEKSANDR Polischuk",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-01T18:31:49.298Z",
+        "id": 1080,
+        "workflowId": "5iXUqYa4eX72YBbP",
+        "versionId": "b53fabcf-b589-442d-bee0-22ae4509e5c3",
+        "event": "activated",
+        "userId": "6f7766c1-8e6d-478f-a667-93619ba35dbe"
+      }
+    ]
+  }
 }
