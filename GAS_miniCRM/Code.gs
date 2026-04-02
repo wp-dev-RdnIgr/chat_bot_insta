@@ -7,6 +7,11 @@ const SUPABASE_URL = 'https://saajgmcaohjqtxufffid.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhYWpnbWNhb2hqcXR4dWZmZmlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY5NDUxOSwiZXhwIjoyMDg5MjcwNTE5fQ.MhnKsCYqeIrOEryimCgXG4nMbvs2tlhs_oF6-jMMIa0';
 const GOOGLE_CALENDAR_ID = 'cumasergej08@gmail.com';
 
+// n8n Calendar Proxy webhooks (uses Google Calendar OAuth from n8n)
+const N8N_CALENDAR_EVENTS = 'https://n8n.rnd.webpromo.tools/webhook/crm-calendar-events';
+const N8N_CALENDAR_CREATE = 'https://n8n.rnd.webpromo.tools/webhook/crm-calendar-create';
+const N8N_CALENDAR_DELETE = 'https://n8n.rnd.webpromo.tools/webhook/crm-calendar-delete';
+
 // =====================================================
 // Web App Entry Point
 // =====================================================
@@ -97,31 +102,29 @@ function createManualBooking(data) {
     clientId = newClient[0].id;
   }
 
-  // 2. Create Google Calendar event
+  // 2. Create Google Calendar event via n8n proxy
   let googleEventId = null;
   try {
     const service = sbFetch(`services?id=eq.${data.service_id}&limit=1`)[0];
     const master = sbFetch(`masters?id=eq.${data.master_id}&limit=1`)[0];
     const calendarId = master.google_calendar_id || GOOGLE_CALENDAR_ID;
 
-    const startDt = new Date(`${data.date}T${data.start_time}:00`);
-    const endDt = new Date(`${data.date}T${data.end_time}:00`);
+    const description = [
+      `Послуга: ${service.name}`,
+      `Майстер: ${master.name}`,
+      `Клієнт: ${data.client_name || '—'}`,
+      `Тел: ${data.client_phone || '—'}`,
+      data.comment ? `Коментар: ${data.comment}` : ''
+    ].filter(Boolean).join('\n');
 
-    const event = CalendarApp.getCalendarById(calendarId).createEvent(
-      `${service.name} — ${data.client_name || 'Клієнт'}`,
-      startDt,
-      endDt,
-      {
-        description: [
-          `Послуга: ${service.name}`,
-          `Майстер: ${master.name}`,
-          `Клієнт: ${data.client_name || '—'}`,
-          `Тел: ${data.client_phone || '—'}`,
-          data.comment ? `Коментар: ${data.comment}` : ''
-        ].filter(Boolean).join('\n')
-      }
-    );
-    googleEventId = event.getId();
+    const calResp = n8nCalendar(N8N_CALENDAR_CREATE, {
+      calendar_id: calendarId,
+      summary: `${service.name} — ${data.client_name || 'Клієнт'}`,
+      description: description,
+      start_datetime: `${data.date}T${data.start_time}:00`,
+      end_datetime: `${data.date}T${data.end_time}:00`
+    });
+    googleEventId = calResp.id || null;
   } catch (e) {
     Logger.log('Calendar error: ' + e.message);
   }
@@ -151,12 +154,15 @@ function cancelBooking(bookingId) {
   const booking = sbFetch(`bookings?id=eq.${bookingId}&limit=1`)[0];
   if (!booking) throw new Error('Запис не знайдено');
 
-  // Cancel Google Calendar event
+  // Cancel Google Calendar event via n8n proxy
   if (booking.google_event_id) {
     try {
       const master = sbFetch(`masters?id=eq.${booking.master_id}&limit=1`)[0];
       const calendarId = master.google_calendar_id || GOOGLE_CALENDAR_ID;
-      CalendarApp.getCalendarById(calendarId).getEventById(booking.google_event_id).deleteEvent();
+      n8nCalendar(N8N_CALENDAR_DELETE, {
+        calendar_id: calendarId,
+        event_id: booking.google_event_id
+      });
     } catch (e) {
       Logger.log('Calendar delete error: ' + e.message);
     }
@@ -289,4 +295,31 @@ function updateClient(id, data) {
     body: data
   });
   return { success: true };
+}
+
+// =====================================================
+// n8n CALENDAR PROXY
+// =====================================================
+
+function n8nCalendar(webhookUrl, payload) {
+  const resp = UrlFetchApp.fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  const code = resp.getResponseCode();
+  const text = resp.getContentText();
+  if (code >= 400) {
+    throw new Error(`n8n Calendar ${code}: ${text}`);
+  }
+  return text ? JSON.parse(text) : null;
+}
+
+function getCalendarEvents(startDate, endDate, calendarId) {
+  return n8nCalendar(N8N_CALENDAR_EVENTS, {
+    calendar_id: calendarId || GOOGLE_CALENDAR_ID,
+    start_date: startDate,
+    end_date: endDate
+  });
 }
