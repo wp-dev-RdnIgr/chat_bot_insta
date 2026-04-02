@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-01T18:33:26.392Z",
+  "updatedAt": "2026-04-02T14:04:59.141Z",
   "createdAt": "2026-03-16T15:30:26.859Z",
   "id": "5iXUqYa4eX72YBbP",
   "name": "Instagram Booking Bot — Nail Studio Kyiv OB",
@@ -258,7 +258,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"client_id\": \"{{ $('Prepare Context').item.json.clientId }}\",\n  \"master_id\": \"{{ $fromAI('master_id', '') }}\",\n  \"service_id\": \"{{ $fromAI('service_id', '') }}\",\n  \"date\": \"{{ $fromAI('date', '') }}\",\n  \"start_time\": \"{{ $fromAI('start_time', '') }}\",\n  \"end_time\": \"{{ $fromAI('end_time', '') }}\",\n  \"google_event_id\": \"{{ $fromAI('google_event_id', '') }}\",\n  \"status\": \"confirmed\"\n}",
+        "jsonBody": "={\n  \"client_id\": \"{{ $('Prepare Context').item.json.clientId }}\",\n  \"master_id\": \"{{ $fromAI('master_id', '') }}\",\n  \"service_id\": \"{{ $fromAI('service_id', '') }}\",\n  \"date\": \"{{ $fromAI('date', '') }}\",\n  \"start_time\": \"{{ $fromAI('start_time', '') }}\",\n  \"end_time\": \"{{ $fromAI('end_time', '') }}\",\n  \"google_event_id\": \"{{ $fromAI('google_event_id', '') }}\",\n  \"status\": \"confirmed\",\n  \"source\": \"instagram_bot\"\n}",
         "options": {}
       },
       "id": "tool-save-booking",
@@ -457,15 +457,15 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "0cb94237-0178-4862-81a6-ed7960f7b523",
-  "activeVersionId": "0cb94237-0178-4862-81a6-ed7960f7b523",
-  "versionCounter": 86,
+  "versionId": "76c6ddab-155f-49d8-91a5-708ead4a6779",
+  "activeVersionId": "76c6ddab-155f-49d8-91a5-708ead4a6779",
+  "versionCounter": 90,
   "triggerCount": 2,
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-04-01T18:33:26.393Z",
-    "createdAt": "2026-04-01T18:33:26.393Z",
-    "versionId": "0cb94237-0178-4862-81a6-ed7960f7b523",
+    "updatedAt": "2026-04-02T14:04:59.144Z",
+    "createdAt": "2026-04-02T14:04:59.144Z",
+    "versionId": "76c6ddab-155f-49d8-91a5-708ead4a6779",
     "workflowId": "5iXUqYa4eX72YBbP",
     "nodes": [
       {
@@ -719,7 +719,7 @@
           },
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={\n  \"client_id\": \"{{ $('Prepare Context').item.json.clientId }}\",\n  \"master_id\": \"{{ $fromAI('master_id', '') }}\",\n  \"service_id\": \"{{ $fromAI('service_id', '') }}\",\n  \"date\": \"{{ $fromAI('date', '') }}\",\n  \"start_time\": \"{{ $fromAI('start_time', '') }}\",\n  \"end_time\": \"{{ $fromAI('end_time', '') }}\",\n  \"google_event_id\": \"{{ $fromAI('google_event_id', '') }}\",\n  \"status\": \"confirmed\"\n}",
+          "jsonBody": "={\n  \"client_id\": \"{{ $('Prepare Context').item.json.clientId }}\",\n  \"master_id\": \"{{ $fromAI('master_id', '') }}\",\n  \"service_id\": \"{{ $fromAI('service_id', '') }}\",\n  \"date\": \"{{ $fromAI('date', '') }}\",\n  \"start_time\": \"{{ $fromAI('start_time', '') }}\",\n  \"end_time\": \"{{ $fromAI('end_time', '') }}\",\n  \"google_event_id\": \"{{ $fromAI('google_event_id', '') }}\",\n  \"status\": \"confirmed\",\n  \"source\": \"instagram_bot\"\n}",
           "options": {}
         },
         "id": "tool-save-booking",
