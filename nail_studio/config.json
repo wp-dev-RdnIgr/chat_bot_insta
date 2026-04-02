@@ -1,0 +1,11 @@
+{
+  "name": "Instagram Booking Bot — Nail Studio Kyiv OB",
+  "workflow_id": "5iXUqYa4eX72YBbP",
+  "n8n_url": "https://n8n.rnd.webpromo.tools/workflow/5iXUqYa4eX72YBbP",
+  "webhook_url": "https://n8n.rnd.webpromo.tools/webhook/instagram-webhook",
+  "instagram": "@nail.studio.kyiv_ob",
+  "google_calendar": "cumasergej08@gmail.com",
+  "supabase_project": "saajgmcaohjqtxufffid",
+  "nodes": 14,
+  "description": "Instagram booking bot for nail studio with Google Calendar integration"
+}
