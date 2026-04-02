@@ -1,0 +1,790 @@
+<script>
+// =====================================================
+// GAS miniCRM — App Logic
+// =====================================================
+
+// State
+let currentWeekStart = getMonday(new Date());
+let allMasters = [];
+let allServices = [];
+let activeMasterIds = new Set();
+let bookingsCache = [];
+
+const DAY_NAMES_UA = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const DAY_NAMES_FULL = ['Неділя', 'Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота'];
+const MONTH_NAMES = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
+  'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
+
+const WORK_START = 9; // 9:00
+const WORK_END = 19;  // 19:00
+
+// ===== UTILS =====
+
+function getMonday(d) {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  date.setDate(diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function formatDate(d) {
+  return d.toISOString().split('T')[0];
+}
+
+function addDays(d, n) {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function isToday(d) {
+  const today = new Date();
+  return d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear();
+}
+
+function toast(msg, duration = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function showLoading(el) {
+  el.innerHTML = '<div class="calendar__loading">Завантаження...</div>';
+}
+
+// ===== TABS =====
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+
+  const titles = { schedule: 'Розклад', services: 'Послуги', masters: 'Спеціалісти', clients: 'Клієнти' };
+  document.getElementById('pageTitle').textContent = titles[tab];
+
+  if (tab === 'services') loadServices();
+  if (tab === 'masters') loadMasters();
+  if (tab === 'clients') loadClients();
+  if (tab === 'schedule') loadSchedule();
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ===== MODAL =====
+
+function openModal(title, bodyHtml, footerHtml) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  document.getElementById('modalFooter').innerHTML = footerHtml || '';
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('modalBackdrop').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  document.getElementById('modalBackdrop').classList.remove('open');
+}
+
+// ===== SCHEDULE =====
+
+function changeWeek(dir) {
+  currentWeekStart = addDays(currentWeekStart, dir * 7);
+  loadSchedule();
+}
+
+function goToToday() {
+  currentWeekStart = getMonday(new Date());
+  loadSchedule();
+}
+
+function loadSchedule() {
+  const startDate = formatDate(currentWeekStart);
+  const endDate = formatDate(addDays(currentWeekStart, 6));
+
+  const endD = addDays(currentWeekStart, 6);
+  const label = `${currentWeekStart.getDate()} ${MONTH_NAMES[currentWeekStart.getMonth()]} — ${endD.getDate()} ${MONTH_NAMES[endD.getMonth()]} ${endD.getFullYear()}`;
+  document.getElementById('weekLabel').textContent = label;
+
+  showLoading(document.getElementById('calendarGrid'));
+
+  // Load masters & bookings in parallel
+  google.script.run.withSuccessHandler(function(masters) {
+    allMasters = masters.filter(m => m.is_active);
+    if (activeMasterIds.size === 0) {
+      allMasters.forEach(m => activeMasterIds.add(m.id));
+    }
+    renderMasterChips();
+
+    google.script.run.withSuccessHandler(function(bookings) {
+      bookingsCache = bookings;
+      renderCalendar();
+    }).withFailureHandler(onError).getBookings(startDate, endDate);
+  }).withFailureHandler(onError).getMasters();
+}
+
+function renderMasterChips() {
+  const container = document.getElementById('masterChips');
+  container.innerHTML = allMasters.map(m => {
+    const active = activeMasterIds.has(m.id) ? 'active' : '';
+    return `<div class="chip ${active}" onclick="toggleMaster('${m.id}')" style="color:${m.color || '#6C5CE7'}">
+      <span class="chip__dot" style="background:${m.color || '#6C5CE7'}"></span>
+      ${m.name}
+    </div>`;
+  }).join('');
+}
+
+function toggleMaster(id) {
+  if (activeMasterIds.has(id)) {
+    if (activeMasterIds.size > 1) activeMasterIds.delete(id);
+  } else {
+    activeMasterIds.add(id);
+  }
+  renderMasterChips();
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const grid = document.getElementById('calendarGrid');
+  let html = '';
+
+  // Header row
+  html += '<div class="calendar__header"></div>';
+  for (let d = 0; d < 7; d++) {
+    const day = addDays(currentWeekStart, d);
+    const todayCls = isToday(day) ? 'calendar__header--today' : '';
+    html += `<div class="calendar__header ${todayCls}">
+      ${DAY_NAMES_UA[day.getDay()]}
+      <span class="calendar__header-date">${day.getDate()}</span>
+    </div>`;
+  }
+
+  // Time rows
+  for (let h = WORK_START; h < WORK_END; h++) {
+    const timeStr = `${h.toString().padStart(2, '0')}:00`;
+    html += `<div class="calendar__time">${timeStr}</div>`;
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(currentWeekStart, d);
+      const dateStr = formatDate(day);
+      html += `<div class="calendar__cell" data-date="${dateStr}" data-hour="${h}" onclick="onCellClick('${dateStr}','${timeStr}')"></div>`;
+    }
+  }
+
+  grid.innerHTML = html;
+
+  // Place events
+  const filtered = bookingsCache.filter(b => activeMasterIds.has(b.master?.id));
+  filtered.forEach(b => {
+    const startH = parseInt(b.start_time.split(':')[0]);
+    const startM = parseInt(b.start_time.split(':')[1]);
+    const endH = parseInt(b.end_time.split(':')[0]);
+    const endM = parseInt(b.end_time.split(':')[1]);
+
+    if (startH < WORK_START || startH >= WORK_END) return;
+
+    const dayDate = new Date(b.date + 'T00:00:00');
+    const dayIdx = Math.round((dayDate - currentWeekStart) / 86400000);
+    if (dayIdx < 0 || dayIdx > 6) return;
+
+    const cell = grid.querySelector(`[data-date="${b.date}"][data-hour="${startH}"]`);
+    if (!cell) return;
+
+    const topOffset = (startM / 60) * 48;
+    const durationMin = (endH * 60 + endM) - (startH * 60 + startM);
+    const height = (durationMin / 60) * 48 - 2;
+    const color = b.master?.color || '#6C5CE7';
+
+    const clientName = b.client?.name || b.client?.instagram_username || 'Клієнт';
+    const serviceName = b.service?.name || '';
+
+    const ev = document.createElement('div');
+    ev.className = 'calendar__event';
+    ev.style.cssText = `top:${topOffset}px; height:${height}px; background:${color}15; border-color:${color}; color:${color};`;
+    ev.innerHTML = `<div class="calendar__event-title">${serviceName}</div>
+      <div class="calendar__event-sub">${clientName} • ${b.start_time.slice(0,5)}</div>`;
+    ev.onclick = function(e) { e.stopPropagation(); viewBooking(b); };
+    cell.appendChild(ev);
+  });
+}
+
+function onCellClick(date, time) {
+  openNewBooking(date, time);
+}
+
+// ===== VIEW BOOKING =====
+
+function viewBooking(b) {
+  const clientName = b.client?.name || b.client?.instagram_username || '—';
+  const body = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="form-group">
+        <label>Послуга</label>
+        <div style="font-size:15px;font-weight:600">${b.service?.name || '—'}</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Дата</label>
+          <div>${b.date}</div>
+        </div>
+        <div class="form-group">
+          <label>Час</label>
+          <div>${b.start_time?.slice(0,5)} — ${b.end_time?.slice(0,5)}</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Майстер</label>
+          <div>${b.master?.name || '—'}</div>
+        </div>
+        <div class="form-group">
+          <label>Ціна</label>
+          <div style="font-weight:700;color:var(--primary)">${b.service?.price || 0} грн</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Клієнт</label>
+        <div>${clientName}${b.client?.phone ? ' • ' + b.client.phone : ''}${b.client?.instagram_username ? ' • @' + b.client.instagram_username : ''}</div>
+      </div>
+      ${b.comment ? `<div class="form-group"><label>Коментар</label><div>${b.comment}</div></div>` : ''}
+      <div class="form-row">
+        <div class="form-group">
+          <label>Статус</label>
+          <span class="badge badge--${b.status}">${b.status}</span>
+        </div>
+        <div class="form-group">
+          <label>Джерело</label>
+          <span class="badge badge--${b.source === 'manual_crm' ? 'crm' : 'bot'}">${b.source === 'manual_crm' ? 'CRM' : 'Instagram бот'}</span>
+        </div>
+      </div>
+    </div>
+  `;
+  const footer = `
+    ${b.status === 'confirmed' ? `<button class="btn btn--success btn--sm" onclick="doUpdateStatus('${b.id}','completed')">Виконано</button>` : ''}
+    ${b.status === 'confirmed' ? `<button class="btn btn--danger btn--sm" onclick="doCancelBooking('${b.id}')">Скасувати</button>` : ''}
+    <button class="btn btn--outline btn--sm" onclick="closeModal()">Закрити</button>
+  `;
+  openModal('Деталі запису', body, footer);
+}
+
+function doCancelBooking(id) {
+  if (!confirm('Скасувати цей запис?')) return;
+  google.script.run.withSuccessHandler(function() {
+    toast('Запис скасовано');
+    closeModal();
+    loadSchedule();
+  }).withFailureHandler(onError).cancelBooking(id);
+}
+
+function doUpdateStatus(id, status) {
+  google.script.run.withSuccessHandler(function() {
+    toast('Статус оновлено');
+    closeModal();
+    loadSchedule();
+  }).withFailureHandler(onError).updateBookingStatus(id, status);
+}
+
+// ===== NEW BOOKING =====
+
+function openNewBooking(date, time) {
+  const today = formatDate(new Date());
+  const mastersOpts = allMasters.filter(m => m.is_active)
+    .map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+  // Services will be loaded dynamically
+  const body = `
+    <div class="form-group">
+      <label>Майстер</label>
+      <select class="form-control" id="bk_master" onchange="onBookingMasterChange()">
+        <option value="">— Оберіть —</option>
+        ${mastersOpts}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Послуга</label>
+      <select class="form-control" id="bk_service" onchange="onBookingServiceChange()">
+        <option value="">— Спочатку оберіть майстра —</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Дата</label>
+        <input type="date" class="form-control" id="bk_date" value="${date || today}">
+      </div>
+      <div class="form-group">
+        <label>Час початку</label>
+        <input type="time" class="form-control" id="bk_start" value="${time || '10:00'}" step="1800">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Час закінчення</label>
+        <input type="time" class="form-control" id="bk_end" readonly>
+      </div>
+      <div class="form-group">
+        <label>Ціна</label>
+        <div id="bk_price" style="padding:10px 0;font-weight:700;color:var(--primary)">—</div>
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Ім'я клієнта</label>
+        <input type="text" class="form-control" id="bk_client_name" placeholder="Олена">
+      </div>
+      <div class="form-group">
+        <label>Телефон</label>
+        <input type="tel" class="form-control" id="bk_client_phone" placeholder="+380...">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Коментар</label>
+      <textarea class="form-control" id="bk_comment" placeholder="Додатковий коментар..."></textarea>
+    </div>
+  `;
+  const footer = `
+    <button class="btn btn--outline" onclick="closeModal()">Скасувати</button>
+    <button class="btn btn--primary" onclick="submitNewBooking()">Створити запис</button>
+  `;
+  openModal('Новий запис', body, footer);
+
+  // Load services for master selection
+  if (!allServices.length) {
+    google.script.run.withSuccessHandler(function(svcs) {
+      allServices = svcs;
+    }).getServices();
+  }
+}
+
+function onBookingMasterChange() {
+  const masterId = document.getElementById('bk_master').value;
+  const svcSelect = document.getElementById('bk_service');
+
+  if (!masterId) {
+    svcSelect.innerHTML = '<option value="">— Спочатку оберіть майстра —</option>';
+    return;
+  }
+
+  // Get this master's services
+  google.script.run.withSuccessHandler(function(serviceIds) {
+    const available = allServices.filter(s => s.is_active && serviceIds.includes(s.id));
+    svcSelect.innerHTML = '<option value="">— Оберіть послугу —</option>' +
+      available.map(s => `<option value="${s.id}" data-dur="${s.duration_minutes}" data-price="${s.price}">${s.name} (${s.price} грн, ${s.duration_minutes} хв)</option>`).join('');
+  }).getMasterServices(masterId);
+}
+
+function onBookingServiceChange() {
+  const sel = document.getElementById('bk_service');
+  const opt = sel.options[sel.selectedIndex];
+  const startTime = document.getElementById('bk_start').value;
+
+  if (!opt || !opt.dataset.dur) {
+    document.getElementById('bk_end').value = '';
+    document.getElementById('bk_price').textContent = '—';
+    return;
+  }
+
+  const dur = parseInt(opt.dataset.dur);
+  const price = opt.dataset.price;
+  document.getElementById('bk_price').textContent = price + ' грн';
+
+  // Calculate end time
+  if (startTime) {
+    const [h, m] = startTime.split(':').map(Number);
+    const endMin = h * 60 + m + dur;
+    const endH = Math.floor(endMin / 60).toString().padStart(2, '0');
+    const endM = (endMin % 60).toString().padStart(2, '0');
+    document.getElementById('bk_end').value = `${endH}:${endM}`;
+  }
+}
+
+function submitNewBooking() {
+  const data = {
+    master_id: document.getElementById('bk_master').value,
+    service_id: document.getElementById('bk_service').value,
+    date: document.getElementById('bk_date').value,
+    start_time: document.getElementById('bk_start').value,
+    end_time: document.getElementById('bk_end').value,
+    client_name: document.getElementById('bk_client_name').value,
+    client_phone: document.getElementById('bk_client_phone').value,
+    comment: document.getElementById('bk_comment').value
+  };
+
+  if (!data.master_id || !data.service_id || !data.date || !data.start_time) {
+    toast('Заповніть всі обовʼязкові поля');
+    return;
+  }
+
+  const btn = document.querySelector('.modal__footer .btn--primary');
+  btn.disabled = true;
+  btn.textContent = 'Створення...';
+
+  google.script.run.withSuccessHandler(function(result) {
+    toast('Запис створено!');
+    closeModal();
+    loadSchedule();
+  }).withFailureHandler(function(err) {
+    btn.disabled = false;
+    btn.textContent = 'Створити запис';
+    onError(err);
+  }).createManualBooking(data);
+}
+
+// ===== SERVICES TAB =====
+
+function loadServices() {
+  showLoading(document.getElementById('servicesGrid'));
+  google.script.run.withSuccessHandler(function(services) {
+    allServices = services;
+    renderServices(services);
+  }).withFailureHandler(onError).getServices();
+}
+
+function renderServices(services) {
+  const active = services.filter(s => s.is_active);
+  const groups = {};
+  active.forEach(s => {
+    if (!groups[s.category]) groups[s.category] = [];
+    groups[s.category].push(s);
+  });
+
+  const ICONS = { 'Манікюр': '💅', 'Нарощування': '✨', 'Педикюр': '🦶', 'Дизайн': '🎨' };
+  let html = '';
+
+  Object.entries(groups).forEach(([cat, items]) => {
+    html += `<div class="service-category">${ICONS[cat] || '💎'} ${cat}</div>`;
+    items.forEach(s => {
+      html += `<div class="service-card">
+        <div>
+          <div class="service-card__name">${s.name}</div>
+          <div class="service-card__desc">${s.description || ''}</div>
+        </div>
+        <div class="service-card__duration">${s.duration_minutes} хв</div>
+        <div class="service-card__price">${s.price} грн</div>
+        <div class="service-card__actions">
+          <button class="btn btn--icon" onclick="openEditService('${s.id}')"><span class="material-icons-round">edit</span></button>
+          <button class="btn btn--icon" onclick="doDeleteService('${s.id}','${s.name}')"><span class="material-icons-round">delete</span></button>
+        </div>
+      </div>`;
+    });
+  });
+
+  document.getElementById('servicesGrid').innerHTML = html;
+}
+
+function openNewService() {
+  const body = `
+    <div class="form-group"><label>Назва</label><input class="form-control" id="svc_name"></div>
+    <div class="form-group"><label>Категорія</label>
+      <select class="form-control" id="svc_category">
+        <option>Манікюр</option><option>Нарощування</option><option>Педикюр</option><option>Дизайн</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Тривалість (хв)</label><input type="number" class="form-control" id="svc_duration" value="60"></div>
+      <div class="form-group"><label>Ціна (грн)</label><input type="number" class="form-control" id="svc_price"></div>
+    </div>
+    <div class="form-group"><label>Опис</label><textarea class="form-control" id="svc_desc"></textarea></div>
+  `;
+  openModal('Нова послуга', body, `
+    <button class="btn btn--outline" onclick="closeModal()">Скасувати</button>
+    <button class="btn btn--primary" onclick="submitNewService()">Зберегти</button>
+  `);
+}
+
+function submitNewService() {
+  const data = {
+    name: document.getElementById('svc_name').value,
+    category: document.getElementById('svc_category').value,
+    duration_minutes: parseInt(document.getElementById('svc_duration').value),
+    price: parseFloat(document.getElementById('svc_price').value),
+    description: document.getElementById('svc_desc').value,
+    is_active: true
+  };
+  if (!data.name || !data.price) { toast('Заповніть назву та ціну'); return; }
+  google.script.run.withSuccessHandler(function() {
+    toast('Послугу додано'); closeModal(); loadServices();
+  }).withFailureHandler(onError).createService(data);
+}
+
+function openEditService(id) {
+  const s = allServices.find(x => x.id === id);
+  if (!s) return;
+  const body = `
+    <div class="form-group"><label>Назва</label><input class="form-control" id="svc_name" value="${s.name}"></div>
+    <div class="form-group"><label>Категорія</label>
+      <select class="form-control" id="svc_category">
+        ${['Манікюр','Нарощування','Педикюр','Дизайн'].map(c => `<option ${c===s.category?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Тривалість (хв)</label><input type="number" class="form-control" id="svc_duration" value="${s.duration_minutes}"></div>
+      <div class="form-group"><label>Ціна (грн)</label><input type="number" class="form-control" id="svc_price" value="${s.price}"></div>
+    </div>
+    <div class="form-group"><label>Опис</label><textarea class="form-control" id="svc_desc">${s.description || ''}</textarea></div>
+  `;
+  openModal('Редагувати послугу', body, `
+    <button class="btn btn--outline" onclick="closeModal()">Скасувати</button>
+    <button class="btn btn--primary" onclick="submitEditService('${id}')">Зберегти</button>
+  `);
+}
+
+function submitEditService(id) {
+  const data = {
+    name: document.getElementById('svc_name').value,
+    category: document.getElementById('svc_category').value,
+    duration_minutes: parseInt(document.getElementById('svc_duration').value),
+    price: parseFloat(document.getElementById('svc_price').value),
+    description: document.getElementById('svc_desc').value
+  };
+  google.script.run.withSuccessHandler(function() {
+    toast('Збережено'); closeModal(); loadServices();
+  }).withFailureHandler(onError).updateService(id, data);
+}
+
+function doDeleteService(id, name) {
+  if (!confirm(`Деактивувати послугу "${name}"?`)) return;
+  google.script.run.withSuccessHandler(function() {
+    toast('Послугу деактивовано'); loadServices();
+  }).withFailureHandler(onError).deleteService(id);
+}
+
+// ===== MASTERS TAB =====
+
+function loadMasters() {
+  showLoading(document.getElementById('mastersGrid'));
+  google.script.run.withSuccessHandler(function(masters) {
+    allMasters = masters;
+    renderMasters(masters.filter(m => m.is_active));
+  }).withFailureHandler(onError).getMasters();
+}
+
+function renderMasters(masters) {
+  const DAYS_UA = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  let html = '';
+
+  masters.forEach(m => {
+    const daysOff = (m.days_off || []).map(d => DAYS_UA[d]).join(', ') || 'Немає';
+    const initial = m.name.charAt(0);
+    html += `<div class="master-card">
+      <div class="master-card__header">
+        <div class="master-card__avatar" style="background:${m.color || '#6C5CE7'}">${initial}</div>
+        <div>
+          <div class="master-card__name">${m.name}</div>
+          <div class="master-card__status">Активний</div>
+        </div>
+      </div>
+      <div class="master-card__info">
+        <div class="master-card__row">
+          <span class="material-icons-round">schedule</span>
+          ${m.work_start?.slice(0,5) || '09:00'} — ${m.work_end?.slice(0,5) || '18:00'}
+        </div>
+        <div class="master-card__row">
+          <span class="material-icons-round">event_busy</span>
+          Вихідні: ${daysOff}
+        </div>
+        ${m.google_calendar_id ? `<div class="master-card__row">
+          <span class="material-icons-round">calendar_month</span>
+          ${m.google_calendar_id}
+        </div>` : ''}
+      </div>
+      <div class="master-card__actions">
+        <button class="btn btn--outline btn--sm" onclick="openEditMaster('${m.id}')">
+          <span class="material-icons-round">edit</span> Редагувати
+        </button>
+        <button class="btn btn--danger btn--sm" onclick="doDeleteMaster('${m.id}','${m.name}')">
+          <span class="material-icons-round">delete</span>
+        </button>
+      </div>
+    </div>`;
+  });
+
+  document.getElementById('mastersGrid').innerHTML = html || '<div style="color:var(--text-dim)">Немає спеціалістів</div>';
+}
+
+function openNewMaster() {
+  ensureServicesLoaded(function() {
+    const daysCheckboxes = ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'].map((d,i) =>
+      `<label class="checkbox-item"><input type="checkbox" name="m_days_off" value="${i}"> ${d}</label>`
+    ).join('');
+
+    const svcCheckboxes = allServices.filter(s=>s.is_active).map(s =>
+      `<label class="checkbox-item"><input type="checkbox" name="m_services" value="${s.id}"> ${s.name}</label>`
+    ).join('');
+
+    const body = `
+      <div class="form-group"><label>Ім'я</label><input class="form-control" id="m_name"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Початок роботи</label><input type="time" class="form-control" id="m_start" value="09:00"></div>
+        <div class="form-group"><label>Кінець роботи</label><input type="time" class="form-control" id="m_end" value="18:00"></div>
+      </div>
+      <div class="form-group"><label>Вихідні</label><div class="checkbox-group">${daysCheckboxes}</div></div>
+      <div class="form-group"><label>Google Calendar ID</label><input class="form-control" id="m_gcal" placeholder="email@gmail.com"></div>
+      <div class="form-group"><label>Колір</label><input type="color" id="m_color" value="#6C5CE7" style="width:50px;height:36px;border:none;cursor:pointer"></div>
+      <div class="form-group"><label>Послуги</label><div class="checkbox-group">${svcCheckboxes}</div></div>
+    `;
+    openModal('Новий спеціаліст', body, `
+      <button class="btn btn--outline" onclick="closeModal()">Скасувати</button>
+      <button class="btn btn--primary" onclick="submitNewMaster()">Зберегти</button>
+    `);
+  });
+}
+
+function submitNewMaster() {
+  const daysOff = Array.from(document.querySelectorAll('[name="m_days_off"]:checked')).map(cb => parseInt(cb.value));
+  const serviceIds = Array.from(document.querySelectorAll('[name="m_services"]:checked')).map(cb => cb.value);
+  const data = {
+    name: document.getElementById('m_name').value,
+    work_start: document.getElementById('m_start').value,
+    work_end: document.getElementById('m_end').value,
+    days_off: daysOff,
+    google_calendar_id: document.getElementById('m_gcal').value || null,
+    color: document.getElementById('m_color').value,
+    service_ids: serviceIds
+  };
+  if (!data.name) { toast('Вкажіть імʼя'); return; }
+  google.script.run.withSuccessHandler(function() {
+    toast('Спеціаліста додано'); closeModal(); loadMasters();
+  }).withFailureHandler(onError).createMaster(data);
+}
+
+function openEditMaster(id) {
+  const m = allMasters.find(x => x.id === id);
+  if (!m) return;
+
+  ensureServicesLoaded(function() {
+    google.script.run.withSuccessHandler(function(masterSvcIds) {
+      const daysCheckboxes = ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'].map((d,i) => {
+        const checked = (m.days_off || []).includes(i) ? 'checked' : '';
+        return `<label class="checkbox-item"><input type="checkbox" name="m_days_off" value="${i}" ${checked}> ${d}</label>`;
+      }).join('');
+
+      const svcCheckboxes = allServices.filter(s=>s.is_active).map(s => {
+        const checked = masterSvcIds.includes(s.id) ? 'checked' : '';
+        return `<label class="checkbox-item"><input type="checkbox" name="m_services" value="${s.id}" ${checked}> ${s.name}</label>`;
+      }).join('');
+
+      const body = `
+        <div class="form-group"><label>Ім'я</label><input class="form-control" id="m_name" value="${m.name}"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Початок роботи</label><input type="time" class="form-control" id="m_start" value="${m.work_start?.slice(0,5) || '09:00'}"></div>
+          <div class="form-group"><label>Кінець роботи</label><input type="time" class="form-control" id="m_end" value="${m.work_end?.slice(0,5) || '18:00'}"></div>
+        </div>
+        <div class="form-group"><label>Вихідні</label><div class="checkbox-group">${daysCheckboxes}</div></div>
+        <div class="form-group"><label>Google Calendar ID</label><input class="form-control" id="m_gcal" value="${m.google_calendar_id || ''}"></div>
+        <div class="form-group"><label>Колір</label><input type="color" id="m_color" value="${m.color || '#6C5CE7'}" style="width:50px;height:36px;border:none;cursor:pointer"></div>
+        <div class="form-group"><label>Послуги</label><div class="checkbox-group">${svcCheckboxes}</div></div>
+      `;
+      openModal('Редагувати: ' + m.name, body, `
+        <button class="btn btn--outline" onclick="closeModal()">Скасувати</button>
+        <button class="btn btn--primary" onclick="submitEditMaster('${id}')">Зберегти</button>
+      `);
+    }).getMasterServices(id);
+  });
+}
+
+function submitEditMaster(id) {
+  const daysOff = Array.from(document.querySelectorAll('[name="m_days_off"]:checked')).map(cb => parseInt(cb.value));
+  const serviceIds = Array.from(document.querySelectorAll('[name="m_services"]:checked')).map(cb => cb.value);
+  const data = {
+    name: document.getElementById('m_name').value,
+    work_start: document.getElementById('m_start').value,
+    work_end: document.getElementById('m_end').value,
+    days_off: daysOff,
+    google_calendar_id: document.getElementById('m_gcal').value || null,
+    color: document.getElementById('m_color').value,
+    service_ids: serviceIds
+  };
+  google.script.run.withSuccessHandler(function() {
+    toast('Збережено'); closeModal(); loadMasters();
+  }).withFailureHandler(onError).updateMaster(id, data);
+}
+
+function doDeleteMaster(id, name) {
+  if (!confirm(`Деактивувати спеціаліста "${name}"?`)) return;
+  google.script.run.withSuccessHandler(function() {
+    toast('Деактивовано'); loadMasters();
+  }).withFailureHandler(onError).deleteMaster(id);
+}
+
+// ===== CLIENTS TAB =====
+
+function loadClients() {
+  showLoading(document.getElementById('clientsTable'));
+  google.script.run.withSuccessHandler(function(clients) {
+    renderClients(clients);
+  }).withFailureHandler(onError).getClients();
+}
+
+function renderClients(clients) {
+  let html = `<table class="data-table">
+    <thead><tr>
+      <th>Ім'я</th><th>Instagram</th><th>Телефон</th><th>Створений</th><th></th>
+    </tr></thead><tbody>`;
+
+  clients.forEach(c => {
+    html += `<tr>
+      <td>${c.name || '—'}</td>
+      <td>${c.instagram_username ? '@' + c.instagram_username : c.instagram_id}</td>
+      <td>${c.phone || '—'}</td>
+      <td>${new Date(c.created_at).toLocaleDateString('uk-UA')}</td>
+      <td><button class="btn btn--icon btn--sm" onclick="openEditClient('${c.id}','${(c.name||'').replace(/'/g,'')}','${c.phone||''}')"><span class="material-icons-round">edit</span></button></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('clientsTable').innerHTML = html;
+}
+
+function openEditClient(id, name, phone) {
+  const body = `
+    <div class="form-group"><label>Ім'я</label><input class="form-control" id="cl_name" value="${name}"></div>
+    <div class="form-group"><label>Телефон</label><input class="form-control" id="cl_phone" value="${phone}"></div>
+  `;
+  openModal('Редагувати клієнта', body, `
+    <button class="btn btn--outline" onclick="closeModal()">Скасувати</button>
+    <button class="btn btn--primary" onclick="submitEditClient('${id}')">Зберегти</button>
+  `);
+}
+
+function submitEditClient(id) {
+  const data = {
+    name: document.getElementById('cl_name').value || null,
+    phone: document.getElementById('cl_phone').value || null
+  };
+  google.script.run.withSuccessHandler(function() {
+    toast('Збережено'); closeModal(); loadClients();
+  }).withFailureHandler(onError).updateClient(id, data);
+}
+
+// ===== HELPERS =====
+
+function ensureServicesLoaded(cb) {
+  if (allServices.length > 0) return cb();
+  google.script.run.withSuccessHandler(function(svcs) {
+    allServices = svcs;
+    cb();
+  }).getServices();
+}
+
+function onError(err) {
+  toast('Помилка: ' + (err.message || err), 5000);
+  console.error(err);
+}
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', function() {
+  // Load services cache
+  google.script.run.withSuccessHandler(function(svcs) {
+    allServices = svcs;
+  }).getServices();
+
+  loadSchedule();
+});
+</script>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  <?!= include('styles'); ?>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar__logo">
+      <span class="sidebar__logo-icon">💅</span>
+      <span class="sidebar__logo-text">Nail Studio</span>
+    </div>
+    <nav class="sidebar__nav">
+      <a class="nav-item active" data-tab="schedule" onclick="switchTab('schedule')">
+        <span class="material-icons-round">calendar_month</span>
+        <span>Розклад</span>
+      </a>
+      <a class="nav-item" data-tab="services" onclick="switchTab('services')">
+        <span class="material-icons-round">spa</span>
+        <span>Послуги</span>
+      </a>
+      <a class="nav-item" data-tab="masters" onclick="switchTab('masters')">
+        <span class="material-icons-round">people</span>
+        <span>Спеціалісти</span>
+      </a>
+      <a class="nav-item" data-tab="clients" onclick="switchTab('clients')">
+        <span class="material-icons-round">person</span>
+        <span>Клієнти</span>
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+    <!-- Top bar -->
+    <header class="topbar">
+      <button class="topbar__menu" onclick="toggleSidebar()">
+        <span class="material-icons-round">menu</span>
+      </button>
+      <h1 class="topbar__title" id="pageTitle">Розклад</h1>
+      <div class="topbar__actions" id="topActions"></div>
+    </header>
+
+    <!-- Tab: Schedule -->
+    <section class="tab-content active" id="tab-schedule">
+      <div class="schedule-controls">
+        <button class="btn btn--icon" onclick="changeWeek(-1)">
+          <span class="material-icons-round">chevron_left</span>
+        </button>
+        <span class="schedule-controls__label" id="weekLabel"></span>
+        <button class="btn btn--icon" onclick="changeWeek(1)">
+          <span class="material-icons-round">chevron_right</span>
+        </button>
+        <button class="btn btn--outline" onclick="goToToday()">Сьогодні</button>
+        <div class="schedule-controls__spacer"></div>
+        <button class="btn btn--primary" onclick="openNewBooking()">
+          <span class="material-icons-round">add</span> Новий запис
+        </button>
+      </div>
+
+      <!-- Master filter chips -->
+      <div class="master-chips" id="masterChips"></div>
+
+      <!-- Calendar grid -->
+      <div class="calendar-wrapper">
+        <div class="calendar" id="calendarGrid">
+          <div class="calendar__loading">Завантаження...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab: Services -->
+    <section class="tab-content" id="tab-services">
+      <div class="tab-header">
+        <h2>Послуги та ціни</h2>
+        <button class="btn btn--primary" onclick="openNewService()">
+          <span class="material-icons-round">add</span> Додати послугу
+        </button>
+      </div>
+      <div class="services-grid" id="servicesGrid">
+        <div class="calendar__loading">Завантаження...</div>
+      </div>
+    </section>
+
+    <!-- Tab: Masters -->
+    <section class="tab-content" id="tab-masters">
+      <div class="tab-header">
+        <h2>Спеціалісти</h2>
+        <button class="btn btn--primary" onclick="openNewMaster()">
+          <span class="material-icons-round">add</span> Додати спеціаліста
+        </button>
+      </div>
+      <div class="masters-grid" id="mastersGrid">
+        <div class="calendar__loading">Завантаження...</div>
+      </div>
+    </section>
+
+    <!-- Tab: Clients -->
+    <section class="tab-content" id="tab-clients">
+      <div class="tab-header">
+        <h2>Клієнти</h2>
+      </div>
+      <div class="clients-table-wrapper" id="clientsTable">
+        <div class="calendar__loading">Завантаження...</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal backdrop -->
+  <div class="modal-backdrop" id="modalBackdrop" onclick="closeModal()"></div>
+
+  <!-- Modal -->
+  <div class="modal" id="modal">
+    <div class="modal__header">
+      <h3 id="modalTitle"></h3>
+      <button class="btn btn--icon" onclick="closeModal()">
+        <span class="material-icons-round">close</span>
+      </button>
+    </div>
+    <div class="modal__body" id="modalBody"></div>
+    <div class="modal__footer" id="modalFooter"></div>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast"></div>
+
+  <?!= include('app'); ?>
+</body>
+</html>
