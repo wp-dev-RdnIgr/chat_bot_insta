@@ -30,7 +30,10 @@ function getMonday(d) {
 }
 
 function formatDate(d) {
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function addDays(d, n) {
@@ -189,8 +192,11 @@ function renderCalendar() {
 
     if (startH < WORK_START || startH >= WORK_END) return;
 
-    const dayDate = new Date(b.date + 'T00:00:00');
-    const dayIdx = Math.round((dayDate - currentWeekStart) / 86400000);
+    // Parse date without timezone issues (YYYY-MM-DD → local date)
+    const [yyyy, mm, dd] = b.date.split('-').map(Number);
+    const dayDate = new Date(yyyy, mm - 1, dd);
+    const weekStartLocal = new Date(currentWeekStart.getFullYear(), currentWeekStart.getMonth(), currentWeekStart.getDate());
+    const dayIdx = Math.round((dayDate - weekStartLocal) / 86400000);
     if (dayIdx < 0 || dayIdx > 6) return;
 
     const cell = grid.querySelector(`[data-date="${b.date}"][data-hour="${startH}"]`);
