@@ -1,0 +1,278 @@
+{
+  "name": "Instagram Lead Scraper — Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "run-lead-scraper",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        192,
+        400
+      ],
+      "webhookId": "lead-scraper-trigger"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1lupYPKDKGSBkg0SOOfDddcOcA-_MrN4h0-YYhcEOpx8",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "read-sheet",
+      "name": "Read Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        400,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "hMp9ISVYVcdpImYl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json[\"Ссылка\"] }}",
+              "rightValue": "instagram.com",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "cond2",
+              "leftValue": "={{ $json[\"Подписчики\"] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter",
+      "name": "Filter: Unprocessed",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        624,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const url = item.json['Ссылка'] || '';\n  // Extract username from URL like https://www.instagram.com/username/ or /username/?g=5\n  const match = url.match(/instagram\\.com\\/([^\\/?]+)/);\n  const username = match ? match[1] : null;\n  \n  if (username) {\n    results.push({\n      json: {\n        ...item.json,\n        username: username,\n        row_number: item.json['row_number'] || items.indexOf(item) + 2\n      }\n    });\n  }\n}\n\nreturn results;\n"
+      },
+      "id": "extract-username",
+      "name": "Extract Username",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.instagram.com/v21.0/me",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "=business_discovery.fields(username,name,biography,followers_count,follows_count,media_count,website,profile_picture_url).username({{ $json.username }})"
+            },
+            {
+              "name": "access_token",
+              "value": "IGAAVQ2FGSYClBZAFp4RHNiSEhqUWRuaTZAPbUFBTDBjTUZAmNF9oU1hHZAE92NGVOWnBJdjlCY2lHeEhTcVRDcGhxUjl2TFg5MW5kMVV3cTFlVS1hbl9xVllIOEZAXOHdFUXFjcXQwbjZAMeTNLUmdaU0ZAnOWIxZAnM0ZAG1NTEdmTks2YwZDZD"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 2000
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-profile",
+      "name": "Fetch Instagram Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1072,
+        400
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst prevItems = $('Extract Username').all();\nconst results = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const prev = prevItems[i].json;\n  const resp = items[i].json;\n  const username = prev.username;\n  \n  // Check for errors\n  if (resp.error) {\n    results.push({json: {\n      original_url: prev['Ссылка'],\n      'Аккаунт Instagram': '@' + username,\n      'Имя / Название салона': '',\n      'Город': '',\n      'Ніша': '',\n      'Подписчики': '',\n      'Есть ссылка на запись?': '',\n      'Комментарий': resp.error.message || JSON.stringify(resp.error)\n    }});\n    continue;\n  }\n  \n  // Extract profile data from business_discovery response\n  const profile = resp.business_discovery || resp;\n  const bio = profile.biography || '';\n  const name = profile.name || '';\n  const followers = profile.followers_count || '';\n  const website = profile.website || '';\n  \n  const bl = (bio + ' ' + name + ' ' + username).toLowerCase();\n  \n  // Detect city\n  let city = '';\n  [['київ','Київ'],['kyiv','Київ'],['харків','Харків'],['kharkiv','Харків'],['kharkov','Харків'],\n   ['одес','Одеса'],['львів','Львів'],['дніпро','Дніпро'],['запоріж','Запоріжжя'],\n   ['полтав','Полтава'],['вінниц','Вінниця']].forEach(([k,v]) => {\n    if (!city && bl.includes(k)) city = v;\n  });\n  \n  // Detect niche\n  let niche = '';\n  [['nail','Нігті'],['нігт','Нігті'],['манікю','Нігті'],['гель','Нігті'],['педікю','Нігті'],\n   ['brow','Брови'],['бров','Брови'],['lash','Вії'],['вії','Вії'],\n   ['hair','Волосся'],['волос','Волосся'],['beauty','Салон'],['краси','Салон'],\n   ['косметолог','Косметологія'],['масаж','Масаж'],['massage','Масаж']].forEach(([k,v]) => {\n    if (!niche && bl.includes(k)) niche = v;\n  });\n  \n  // Check for booking link\n  let hasBooking = 'ні';\n  if (website) {\n    const wl = website.toLowerCase();\n    hasBooking = ['booking','calendly','taplink','linktree','mssg.me','yclients','dikidi','lnk.bio','linktr.ee','solo.to'].some(k => wl.includes(k)) ? 'так' : 'є посилання';\n  }\n  \n  results.push({json: {\n    original_url: prev['Ссылка'],\n    'Аккаунт Instagram': '@' + username,\n    'Имя / Название салона': name,\n    'Город': city,\n    'Ніша': niche,\n    'Подписчики': followers ? String(followers) : '',\n    'Есть ссылка на запись?': hasBooking,\n    'Комментарий': bio.substring(0, 200)\n  }});\n}\n\nreturn results;"
+      },
+      "id": "process-data",
+      "name": "Process Profile Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1lupYPKDKGSBkg0SOOfDddcOcA-_MrN4h0-YYhcEOpx8",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Ссылка": "={{ $json.original_url }}",
+            "Аккаунт Instagram": "={{ $json['Аккаунт Instagram'] }}",
+            "Имя / Название салона": "={{ $json['Имя / Название салона'] }}",
+            "Город": "={{ $json['Город'] }}",
+            "Ниша": "={{ $json['Ніша'] || $json['Ниша'] }}",
+            "Подписчики": "={{ $json['Подписчики'] }}",
+            "Есть ссылка на запись?": "={{ $json['Есть ссылка на запись?'] }}",
+            "Комментарий": "={{ $json['Комментарий'] }}"
+          },
+          "matchingColumns": [
+            "Ссылка"
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "write-sheet",
+      "name": "Write to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1504,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "hMp9ISVYVcdpImYl",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Read Sheet": {
+      "main": [
+        [
+          {
+            "node": "Filter: Unprocessed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Unprocessed": {
+      "main": [
+        [
+          {
+            "node": "Extract Username",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Username": {
+      "main": [
+        [
+          {
+            "node": "Fetch Instagram Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Instagram Profile": {
+      "main": [
+        [
+          {
+            "node": "Process Profile Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Profile Data": {
+      "main": [
+        [
+          {
+            "node": "Write to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
